@@ -249,3 +249,37 @@ Committed as `f9097f2` and pushed to `origin/main` successfully.
 Next step: Step 8 (Session layer — `sessions` table helpers: create,
 look up by hashed token, 30-day rolling expiry, delete; tests for
 create/lookup/expiry/renewal).
+
+### 2026-07-20 — Step 8: Session layer — DONE
+
+Added `src/worker/session.ts`: `createSession(db, userId)` generates a raw
+token (two concatenated UUIDs), SHA-256-hashes it via Web Crypto
+(`crypto.subtle.digest`), and stores only the hash — the raw token is
+returned exactly once, to the caller, and never persisted.
+`lookupSession(db, token)` hashes the presented token, looks up the row by
+`token_hash`, and returns `null` for both unknown and expired sessions
+(callers can't distinguish forged from expired, which is intentional).
+`renewSession(db, token)` slides the 30-day expiry window forward from now,
+refusing to revive a session that's already expired rather than reset its
+clock. `deleteSession(db, token)` removes the row (logout).
+
+Added `test/session.test.ts`: 6 tests — create (asserts the stored
+`token_hash` is a 64-char hex SHA-256 digest and not equal to the raw
+token), lookup (valid token resolves, unknown token returns null), expiry
+(a session whose `expires_at` is forced into the past is rejected), renewal
+×2 (extends `expires_at` forward and the token stays valid; refuses to
+renew an already-expired session), and delete (token stops resolving
+afterward). Each test seeds its own `users` row in `beforeEach` since
+`sessions.user_id` is a required FK.
+
+Verified:
+- `npm test` → 5 test files, 10 passed (6 new session tests + the 4
+  existing files, all still green).
+- `npm run build` → still exits 0.
+
+Committed as `e8ea585` and pushed to `origin/main` successfully.
+
+Next step: Step 9 (Magic-link issue endpoint — `POST
+/api/auth/request-link`: single-use 15-minute token stored hashed, sent via
+the `EmailSender` interface with a console-logging dev implementation, rate
+limited per-IP and per-email).
