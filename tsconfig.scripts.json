@@ -12,10 +12,10 @@
     "isolatedModules": true,
     "noEmit": true,
     "baseUrl": ".",
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
+    "types": ["node"],
     "paths": {
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/worker", "src/shared", "test"]
+  "include": ["scripts", "src/shared"]
 }
