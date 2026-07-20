@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireAuth } from "./auth-middleware";
 import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
 import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
+import { createClaudeClient } from "./claude";
+import { onboardingTurn } from "./onboarding";
 import { getSuggestions } from "./suggestions";
 import { adoptHabit, checkIn, dismissSuggestion, getToday, undoCheckIn } from "./tracking";
 import type { Bindings, Variables } from "./types";
@@ -156,6 +158,39 @@ app.post("/api/habits/:id/dismiss", requireAuth, async (c) => {
   const result = await dismissSuggestion(c.env.DB, userId, habitId);
 
   return c.json({ dismissed: result.dismissed });
+});
+
+const onboardingBodySchema = z
+  .object({ session_id: z.string().min(1), answer: z.string().max(2000) })
+  .partial();
+
+app.post("/api/onboarding/turn", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const parsed = onboardingBodySchema.safeParse(await c.req.json().catch(() => ({})));
+
+  if (!parsed.success) {
+    return c.json({ error: "invalid_request" }, 400);
+  }
+
+  if (!c.env.ANTHROPIC_API_KEY) {
+    return c.json({ error: "ai_unavailable" }, 503);
+  }
+
+  const result = await onboardingTurn({
+    db: c.env.DB,
+    userId,
+    client: createClaudeClient(c.env.ANTHROPIC_API_KEY),
+    now: new Date(),
+    sessionId: parsed.data.session_id,
+    answer: parsed.data.answer,
+  });
+
+  if (!result.ok) {
+    const status = result.reason === "rate_limited" ? 429 : 404;
+    return c.json({ error: result.reason }, status);
+  }
+
+  return c.json(result);
 });
 
 app.get("/api/today", requireAuth, async (c) => {

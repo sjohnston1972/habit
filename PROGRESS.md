@@ -569,3 +569,61 @@ adaptive-thinking config — thinking is left off entirely, as the plan
 specifies.
 
 Next step: Step 15 (the Claude client — `src/worker/claude.ts`).
+
+### 2026-07-20 — Steps 15 & 16: The Claude client and the onboarding endpoint — DONE
+
+**Step 15 — `src/worker/claude.ts`.** `createClaudeClient(apiKey)` calls
+`claude-haiku-4-5` through the official `@anthropic-ai/sdk` with
+`output_config.format` structured outputs, so the profile shape is enforced
+API-side. `extractProfile()` re-validates with `ProfileSchema` regardless,
+retries once on a bad shape, then falls back to `DEFAULT_PROFILE` — the
+degradation path CLAUDE.md §5 asks for. Tokens are summed across *every*
+attempt, including failed ones, because a retry costs real money and
+`qa_sessions` should say so. No `effort`, no thinking — `claude-haiku-4-5`
+takes neither.
+
+`profileJsonSchema()` is hand-written rather than derived from Zod: structured
+outputs reject several constructs generic converters emit, and a test asserts
+it stays in sync with `CATEGORIES`, so drift is caught rather than assumed
+away.
+
+`ProfileClient` is a one-method interface, so the retry/fallback logic is
+testable offline without mocking the SDK.
+
+**Step 16 — `src/worker/onboarding.ts`.** `POST /api/onboarding/turn` behind
+`requireAuth`, driving a **9-question** tappable-first script (inside §5's
+8–12 range) with free text only where a canned option genuinely can't capture
+the answer.
+
+The design decision worth recording: **the questions are a fixed script, and
+the model is called exactly once, at the end.** Generating each turn with the
+model would spend tokens on a solved problem and make the flow
+non-deterministic; the part that actually needs judgement is turning answers
+into a profile. This keeps an onboarding session to a single Haiku call —
+comfortably inside §5's "well under a penny per user".
+
+The final call writes the profile with `ON CONFLICT (user_id) DO UPDATE`, so
+re-running onboarding replaces the profile rather than accumulating rows, and
+logs transcript + `tokens_used` to `qa_sessions`. Rate limited to 3 sessions
+per user per day, counted on interview *start*, reusing the counting pattern
+from `magic-link.ts`. Every query is scoped by `user_id`, so one user can
+never resume another's interview.
+
+Added `test/profile-schema.test.ts` (10 tests, one live) and
+`test/onboarding.test.ts` (20 tests, all offline via a fake client): the
+plan's required assertions plus schema/`CATEGORIES` sync, retry-then-succeed,
+fallback on malformed *and* on a thrown call, token summing across attempts,
+the full question walk, transcript persistence, re-run replacing the profile,
+per-user cap isolation, refusing to reopen a completed interview, and a
+completed interview still writing a valid profile when the model fails
+entirely.
+
+The live test passed against the real API — a real interview transcript came
+back as a `ProfileSchema`-valid object on the first attempt.
+
+Verified:
+- `npm run build` → exits 0.
+- `test/profile-schema.test.ts` → 10 passed (including the live call).
+- `test/onboarding.test.ts` → 20 passed.
+
+Next step: Step 17 (full verification sweep and run notes).
