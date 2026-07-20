@@ -377,3 +377,47 @@ Next step: Step 11 (Auth middleware and the multi-tenancy rule — Hono
 middleware resolving the session cookie to `user_id`, a protected `GET
 /api/me`, and a test asserting cross-tenant isolation plus 401 for
 unauthenticated requests).
+
+### 2026-07-20 — Step 11: Auth middleware and the multi-tenancy rule — DONE
+
+Added `src/worker/types.ts` to hold the shared `Bindings`/`Variables` Hono
+context types — needed to break a circular import, since the new
+middleware needs `Bindings` and `index.ts` needs the middleware.
+`index.ts` still re-exports `Bindings` so `test/env.d.ts`'s existing import
+kept working unchanged.
+
+Added `src/worker/auth-middleware.ts`: `requireAuth` reads the session
+cookie via `hono/cookie`'s `getCookie`, resolves it with `lookupSession`,
+and on success calls `c.set("userId", session.userId)` before `next()`. A
+missing cookie or one that doesn't resolve (forged, unknown, or expired)
+returns 401 immediately — the route handler never runs.
+
+Wired `requireAuth` onto a new `GET /api/me` in `src/worker/index.ts`. The
+handler reads `c.get("userId")` — set only by the middleware from the
+verified session — and queries `users` scoped to exactly that id. It never
+reads any tenant identifier from the request itself, which is the
+multi-tenancy rule from CLAUDE.md §12 in code: a route physically cannot
+be tricked into serving another tenant's row, because it never looks at
+anything the client sent to decide whose data to return.
+
+Added `test/api-me.test.ts` (3 tests): 401 with no session cookie; 401 with
+a forged/unknown cookie; and a cross-tenant isolation test that creates
+users A and B with separate sessions, confirms each session returns only
+that user's own `id`/`email`, and then attaches a spoofed `?userId=<B>`
+query param to a request authenticated as A — the response still comes
+back as A, proving the endpoint ignores request-supplied identifiers
+entirely.
+
+Verified:
+- `npm test` → 8 test files, 26 passed (3 new + all 23 prior tests still
+  green).
+- `npm run build` → still exits 0.
+
+Committed as `7703cf5` and pushed to `origin/main` successfully.
+
+Next step: Step 12 (Minimal UI shell — installable PWA via
+vite-plugin-pwa: manifest, service worker, the 12 category accent colours
+as Tailwind tokens, self-hosted rounded display typeface, `<Mascot />`
+component, a sign-in screen driving steps 9-10, `prefers-reduced-motion`
+support from the start; a test asserting the built manifest is valid
+`standalone` with 192px/512px icons).
