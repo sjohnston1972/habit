@@ -6,6 +6,11 @@ export default defineWorkersConfig(async () => {
   const migrations = await readD1Migrations(migrationsPath);
 
   return {
+    resolve: {
+      alias: {
+        "@shared": path.join(__dirname, "src", "shared"),
+      },
+    },
     test: {
       setupFiles: ["./test/apply-migrations.ts"],
       poolOptions: {
