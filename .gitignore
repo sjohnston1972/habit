@@ -1,0 +1,33 @@
+# Secrets — never commit. Real values belong in Worker secrets (CLAUDE.md §11).
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Cloudflare / wrangler local state (includes the local D1 sqlite files)
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Test / coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
