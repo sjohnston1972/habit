@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { z } from "zod";
+import { requireAuth } from "./auth-middleware";
 import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
 import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
+import type { Bindings, Variables } from "./types";
 
-export type Bindings = {
-  DB: D1Database;
-};
+export type { Bindings, Variables };
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 app.get("/health", (c) => c.json({ ok: true }));
 
@@ -55,6 +55,23 @@ app.get("/api/auth/callback", async (c) => {
   });
 
   return c.json({ ok: true });
+});
+
+// Always scoped by the session-resolved user_id (set by requireAuth), never
+// by anything in the request — the multi-tenancy rule (CLAUDE.md §12).
+app.get("/api/me", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, display_name, timezone FROM users WHERE id = ?",
+  )
+    .bind(userId)
+    .first<{ id: string; email: string; display_name: string; timezone: string }>();
+
+  if (!user) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  return c.json({ user });
 });
 
 export default app;
