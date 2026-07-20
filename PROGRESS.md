@@ -456,3 +456,39 @@ Verified:
 
 Next step: Step 11 (check-off feedback — confetti, haptics, repair and reset
 copy).
+
+### 2026-07-20 — Step 11: Check-off feedback — DONE
+
+Added `src/app/feedback.ts`: `celebrateCheckoff(outcome)` fires a
+canvas-confetti burst sized to the outcome and a Vibration API buzz, guarded
+by `"vibrate" in navigator`; `prefersReducedMotion()` reads the media query
+and assumes motion is fine when `matchMedia` is missing entirely (some
+embedded browsers lack it). `OUTCOME_MESSAGE` holds the copy.
+
+The reduced-motion guard is a **hard stop, not a smaller animation**: if the
+user asked their phone for less movement they get no confetti and no buzz at
+all. `disableForReducedMotion` is passed to confetti as well, so the library's
+own guard backs up ours.
+
+A repair gets 140 particles to an ordinary day's 60 — saving a streak is the
+better story. `Phew — saved it! Your streak lives on.` on `repaired`,
+`Fresh start! Day one of the next streak.` on `reset`. No red, no warning
+iconography, per CLAUDE.md §10's tone rule.
+
+The Today screen now reads the check-in response and **replaces its optimistic
+streak guess with the server's number**. The optimistic +1 is right for an
+ordinary day but wrong for a repair or reset, and the server is the authority.
+`canvas-confetti` recorded in `package.json` dependencies.
+
+Added `test/app/checkoff-feedback.test.tsx` (13 tests): the plan's required
+assertion (no confetti *and* no vibration under `prefers-reduced-motion:
+reduce`) plus vibration absent on devices without the API, no celebration on
+`noop`, a repair bursting bigger than an ordinary day, `matchMedia` missing
+entirely, and screen-level tests that the repair and fresh-start copy appear
+with no red styling.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 20 test files, 204 passed (13 new + all 191 prior still green).
+
+Phase C complete. Next step: Step 12 (the offline queue).

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PRODUCT } from "@shared/branding";
+import type { CheckinOutcome } from "@shared/streaks";
+import { celebrateCheckoff, OUTCOME_MESSAGE } from "../feedback";
 import { HabitCard, type HabitCardHabit } from "../components/HabitCard";
 import { Mascot, type MascotMood } from "../components/Mascot";
 import { SuggestionCard, type SuggestionHabit } from "../components/SuggestionCard";
@@ -19,6 +21,7 @@ export function Today() {
   const [habits, setHabits] = useState<TodayHabit[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [state, setState] = useState<LoadState>("loading");
+  const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -73,11 +76,28 @@ export function Today() {
       );
 
       try {
-        await fetch(`/api/user-habits/${userHabitId}/checkin`, {
+        const res = await fetch(`/api/user-habits/${userHabitId}/checkin`, {
           method: nowCompleted ? "POST" : "DELETE",
           headers: { "Content-Type": "application/json" },
           body: nowCompleted ? JSON.stringify({}) : undefined,
         });
+
+        if (!nowCompleted || !res.ok) return;
+
+        const body = (await res.json()) as { outcome: CheckinOutcome; streak?: TodayHabit["streak"] };
+
+        celebrateCheckoff(body.outcome);
+        setMessage(OUTCOME_MESSAGE[body.outcome] ?? null);
+
+        // The server is the authority on what the streak actually became — a
+        // repair or a reset lands somewhere the optimistic guess didn't.
+        if (body.streak) {
+          setHabits((current) =>
+            current.map((habit) =>
+              habit.user_habit_id === userHabitId ? { ...habit, streak: body.streak! } : habit,
+            ),
+          );
+        }
       } catch {
         // Step 13 replaces this with the offline queue.
       }
@@ -131,6 +151,15 @@ export function Today() {
           )}
         </div>
       </header>
+
+      {message && (
+        <p
+          role="status"
+          className="rounded-3xl bg-[#2F6F5E]/10 p-4 text-center font-display text-[#2F6F5E] motion-safe:animate-[fadeInUp_320ms_ease-out_both]"
+        >
+          {message}
+        </p>
+      )}
 
       {state === "error" && (
         <p className="rounded-3xl bg-amber-50 p-4 text-sm text-amber-900">
