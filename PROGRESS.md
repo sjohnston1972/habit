@@ -421,3 +421,54 @@ as Tailwind tokens, self-hosted rounded display typeface, `<Mascot />`
 component, a sign-in screen driving steps 9-10, `prefers-reduced-motion`
 support from the start; a test asserting the built manifest is valid
 `standalone` with 192px/512px icons).
+
+### 2026-07-20 — Step 12: Minimal UI shell — DONE
+
+Wired `vite-plugin-pwa` into `vite.config.ts` (deferred from step 1, which
+only had Vite + React + Tailwind). The manifest uses the `PRODUCT` constant
+for `name`/`short_name`, `display: "standalone"`, the theme/background
+colours from CLAUDE.md §10, and two hand-authored SVG icons —
+`public/icons/icon-192.svg` and `icon-512.svg`, each a rounded square in
+the theme colour with the 🦦 emoji centered (not generated art; consistent
+with the run's "no illustration assets" constraint, same emoji-backed
+approach as the mascot).
+
+Installed `@fontsource/baloo-2` and `@fontsource/nunito` as dependencies
+and imported their CSS in `src/app/index.css` — the rounded display/body
+typefaces (already declared in `tailwind.config.js`'s `fontFamily` since
+step 1) are now genuinely self-hosted (woff2 shipped in the build output),
+not loaded from a Google Fonts CDN. Added a global `prefers-reduced-motion`
+override in the same file, and used Tailwind's `motion-safe:` variant in
+the new `<Mascot />` component (`src/app/components/Mascot.tsx`,
+`mood: idle | happy | celebrating | sad`, emoji-backed per the PLAN.md
+decision) so its animations respect the same preference from day one.
+
+Added `src/app/screens/SignIn.tsx` and wired it into `App.tsx`: an email
+form posts to `POST /api/auth/request-link` (step 9); on load, it reads a
+`token` query param from the URL (present when the user clicks their email
+link) and calls `GET /api/auth/callback` (step 10), showing a signed-in or
+error state based on the response — this is the "sign-in screen that
+drives steps 9-10" from the plan.
+
+Added `scripts/check-manifest.ts` (`npm run test:manifest`): reads the
+built `dist/manifest.webmanifest`, parses it, and asserts `display ===
+"standalone"` and that the `icons` array contains entries with `sizes`
+`"192x192"` and `"512x512"`. Kept this separate from `npm test` (which
+stays Workers-pool-only) since it needs real Node filesystem access to the
+build output, which the Workers runtime sandbox doesn't have.
+
+Verified:
+- `npm run build` → exits 0; PWA plugin emits `manifest.webmanifest`,
+  `sw.js`, and `workbox-*.js` alongside the usual JS/CSS bundle.
+- `npm run test:manifest` → exit 0, "✓ ... is valid: display=standalone,
+  icons include 192x192 and 512x512."
+- Manually inspected `dist/manifest.webmanifest`: `{"name":"Clydeford
+  Habits",...,"display":"standalone",...,"icons":[{"sizes":"192x192",...},
+  {"sizes":"512x512",...}]}`.
+- `npm test` → 8 test files, 26 passed — unaffected by this step.
+
+Committed as `8b2bbba` and pushed to `origin/main` successfully.
+
+Next step: Step 13 (Full verification sweep — run `npm run build && npm
+test && npm run validate:library` clean in one invocation, paste the
+output into PROGRESS.md, and write `docs/RUN-1-NOTES.md` for the next run).
