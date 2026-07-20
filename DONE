@@ -1,0 +1,65 @@
+# Run 2 complete — The Daily Loop
+
+Finished 2026-07-20. All 17 planned steps done, plus an unplanned step 4a
+added mid-run at Steven's instruction.
+
+## What this run accomplished
+
+The Phase 1 daily loop is built end to end. A signed-in user can now be
+interviewed, receive three scored daily suggestions, adopt habits, check them
+off online or offline, and hold a streak that survives one missed day.
+
+- **Suggestion engine** — deterministic 7-term scoring, pure and explainable,
+  with suggestions stable for the user's local day.
+- **Streaks** — the never-miss-twice rule as a pure function, with repair
+  regeneration and history-replay undo.
+- **Tracking** — adopt (capped at 5), check off, same-day undo, Today read model.
+- **Dashboard** — Today screen, habit and suggestion cards, the run-1 category
+  palette finally consumed, confetti/haptics with a hard reduced-motion stop.
+- **Offline** — IndexedDB queue, replay-safe by the `checkins` unique constraint.
+- **AI onboarding** — 9-question tappable-first interview, one Haiku call at the
+  end, structured outputs + Zod + retry + fallback to defaults.
+
+Verification: `npm run build`, `npm test`, and `npm run validate:library` all
+exit 0. **25 test files, 259 tests passing.** One test hits the live API and
+self-skips when the key is absent.
+
+Every step was committed and pushed to `origin/main` as it completed.
+
+## Left unfinished or needing a decision
+
+Nothing was blocked, and no step was skipped. The following are known gaps
+recorded during the run, not failures:
+
+1. **Habit ids are random per seed.** `scripts/seed.ts` uses
+   `crypto.randomUUID()` and re-seeding does `DELETE FROM habits`, so any
+   re-seed would orphan `user_habits` and `suggestion_log` rows. This is the
+   highest-consequence item and should be fixed before real user data exists.
+2. **`Profile.avoid_tags` is collected but ignored.** The interview asks what
+   to avoid and nothing consumes the answer. Needs a decision from Steven:
+   hard filter, or a penalty term with a weight.
+3. **No onboarding UI.** The endpoint is complete and tested, but nothing in
+   `src/app` calls it — a new user lands on Today with the default profile.
+   This is the most visible gap against Phase 1's definition of done.
+4. **`score_breakdown` stores weighted values**, which is good for explaining
+   one row but awkward for Phase 3 re-weighting across weight eras.
+5. **No `UNIQUE` constraint on `user_habits`** — double-adopt is blocked in
+   application code only.
+
+The full ordered punch list is in `docs/RUN-2-NOTES.md`.
+
+## Where the archive went
+
+`docs/runs/2026-07-20-the-daily-loop/` — PLAN.md and PROGRESS.md.
+Run notes: `docs/RUN-2-NOTES.md`.
+
+## Recommended starting point for the next run
+
+**Build the onboarding UI and fix the habit-id scheme.** Those two together
+turn the daily loop from "works when driven by tests" into "a stranger can sign
+up on their phone and use it", which is CLAUDE.md §14's Phase 1 definition of
+done. The id fix should come first — it is schema-level and gets harder the
+longer it waits.
+
+Before that run can be planned, Steven needs to decide the `avoid_tags`
+question (#2 above), since it changes the scoring engine's shape.
