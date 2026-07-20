@@ -334,3 +334,46 @@ Next step: Step 10 (Magic-link redeem endpoint — `GET
 /api/auth/callback?token=…`: validate, enforce single-use + expiry,
 create-or-fetch user, set HttpOnly+Secure+SameSite=Lax session cookie, mark
 `used_at`; tests for happy path, reused/expired/forged token).
+
+### 2026-07-20 — Step 10: Magic-link redeem endpoint — DONE
+
+Added `redeemMagicLink(db, token)` to `src/worker/magic-link.ts`: hashes the
+presented token, looks it up by `token_hash`, and rejects with a specific
+reason — `"invalid"` for an unknown/forged token, `"used"` for one already
+redeemed, `"expired"` for one past `expires_at`. On success it marks
+`used_at` and calls `findOrCreateUser` (looks up `users` by email, inserts
+a new row with `display_name` derived from the email's local part if none
+exists), returning the `userId`.
+
+Exported `SESSION_DURATION_MS` and added `SESSION_COOKIE_NAME =
+"habit_session"` in `src/worker/session.ts` so the route and the session
+layer share one source of truth for the cookie name and lifetime.
+
+Wired `GET /api/auth/callback` in `src/worker/index.ts`: reads the `token`
+query param (400 if missing), calls `redeemMagicLink`, returns 400 with
+`{ error: reason }` on any failure. On success, calls `createSession` and
+sets the session cookie via `hono/cookie`'s `setCookie` with
+`httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge:
+SESSION_DURATION_MS / 1000`.
+
+Added `test/magic-link-callback.test.ts` (9 tests): happy path (user row
+created with the right email, `magic_links.used_at` set); a second
+redemption for the same email reuses the existing user rather than creating
+a duplicate; reused token rejected (`reason: "used"`); expired token
+rejected (`expires_at` forced into the past); forged token rejected
+(`reason: "invalid"`); plus HTTP-level checks via `SELF.fetch` — the
+`Set-Cookie` header carries `HttpOnly`, `Secure`, and `SameSite=Lax`; a
+reused token returns 400; a forged token returns 400; a missing `token`
+query param returns 400.
+
+Verified:
+- `npm test` → 7 test files, 23 passed (9 new + all 14 prior tests still
+  green).
+- `npm run build` → still exits 0.
+
+Committed as `46840e6` and pushed to `origin/main` successfully.
+
+Next step: Step 11 (Auth middleware and the multi-tenancy rule — Hono
+middleware resolving the session cookie to `user_id`, a protected `GET
+/api/me`, and a test asserting cross-tenant isolation plus 401 for
+unauthenticated requests).
