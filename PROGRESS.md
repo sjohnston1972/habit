@@ -551,3 +551,21 @@ Verified:
 
 Phase D complete. Steps 1–13 are done: the entire key-independent daily loop
 is committed and pushed. Next step: Step 14, the API key preflight.
+
+### 2026-07-20 — Step 14: API key preflight — PASSED
+
+One minimal live call to `claude-haiku-4-5` (`max_tokens: 16`, message "ping")
+via the official `@anthropic-ai/sdk` (installed this step, `^0.112.4`).
+
+Result: **HTTP 200.** Model `claude-haiku-4-5-20251001`, `stop_reason:
+max_tokens` (expected — the 16-token cap cut the reply short, which is the
+point of a cheap probe). Token usage: **8 input, 16 output**, no cache
+activity. Cost of the probe is a rounding error against Haiku's $1/$5 per MTok.
+
+No `Blockers` entry needed. Steps 15–17 are cleared to proceed.
+
+Note for step 15: `claude-haiku-4-5` accepts neither `effort` nor the newer
+adaptive-thinking config — thinking is left off entirely, as the plan
+specifies.
+
+Next step: Step 15 (the Claude client — `src/worker/claude.ts`).
