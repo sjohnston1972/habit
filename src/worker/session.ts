@@ -1,3 +1,5 @@
+import { sha256Hex } from "./hash";
+
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, per CLAUDE.md §3
 
 export interface Session {
@@ -10,12 +12,6 @@ interface SessionRow {
   id: string;
   user_id: string;
   expires_at: string;
-}
-
-async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function generateRawToken(): string {
