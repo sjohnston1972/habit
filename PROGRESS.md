@@ -337,3 +337,29 @@ Verified:
 - `npm test` → 15 test files, 151 passed (24 new + all 127 prior still green).
 
 Next step: Step 8 (`GET /api/today`).
+
+### 2026-07-20 — Step 8: The today endpoint — DONE
+
+Added `getToday(db, userId, now)` to `src/worker/tracking.ts` and wired
+`GET /api/today` behind `requireAuth`. One query joins `user_habits` to
+`habits`, `streaks` and `checkins`, with the check-in join keyed on the
+user's local date so `completed` flips at *their* midnight. Archived habits
+are excluded; ordering is `adopted_at` then `id`, so the list is stable.
+
+The row carries everything a habit card needs to render without a second
+request — title, category, both versions, identity statement, cue, level,
+completion, and current/best streak plus `repair_available`. Step 9's card
+consumes this shape directly.
+
+Added `test/today.test.ts` (11 tests), test-first: completion true and false,
+yesterday's check-in *not* counting as today's, adopted level carried
+through, streak values carried through, card copy present, archived excluded,
+cross-tenant isolation, empty list for a new user, 401 unauthenticated, and
+completion computed in the user's timezone rather than UTC.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 16 test files, 162 passed (11 new + all 151 prior still green).
+
+Phase B complete. Next step: Step 9 (habit card component and category
+colours) — the first frontend step.

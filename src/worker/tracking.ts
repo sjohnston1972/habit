@@ -226,3 +226,96 @@ export async function undoCheckIn(
 
   return { ok: true, removed: deleted.meta.changes > 0, streak };
 }
+
+export interface TodayHabit {
+  user_habit_id: string;
+  habit_id: string;
+  title: string;
+  category: string;
+  level: string;
+  tiny_version: string;
+  standard_version: string;
+  identity_statement: string;
+  cue_suggestion: string | null;
+  custom_cue: string | null;
+  time_of_day: string;
+  duration_minutes: number;
+  completed: boolean;
+  streak: { current: number; best: number; repair_available: boolean };
+}
+
+/**
+ * The caller's active habits with today's completion state — the data behind
+ * the Today screen. "Today" is the user's local day (CLAUDE.md §7), so the
+ * completion flag flips at their midnight, not the server's.
+ */
+export async function getToday(
+  db: D1Database,
+  userId: string,
+  now: Date,
+): Promise<TodayHabit[]> {
+  const user = await db
+    .prepare("SELECT timezone FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ timezone: string }>();
+
+  if (!user) return [];
+
+  const localDate = localDateFor(now, user.timezone);
+
+  const { results } = await db
+    .prepare(
+      `SELECT uh.id AS user_habit_id, uh.habit_id, uh.level, uh.custom_cue,
+              h.title, h.category, h.tiny_version, h.standard_version,
+              h.identity_statement, h.cue_suggestion, h.time_of_day, h.duration_minutes,
+              COALESCE(s.current, 0) AS current, COALESCE(s.best, 0) AS best,
+              COALESCE(s.repair_available, 1) AS repair_available,
+              CASE WHEN c.id IS NULL THEN 0 ELSE 1 END AS completed
+         FROM user_habits uh
+         JOIN habits h ON h.id = uh.habit_id
+         LEFT JOIN streaks s ON s.user_habit_id = uh.id
+         LEFT JOIN checkins c ON c.user_habit_id = uh.id AND c.local_date = ?
+        WHERE uh.user_id = ? AND uh.archived_at IS NULL
+        ORDER BY uh.adopted_at ASC, uh.id ASC`,
+    )
+    .bind(localDate, userId)
+    .all<{
+      user_habit_id: string;
+      habit_id: string;
+      level: string;
+      custom_cue: string | null;
+      title: string;
+      category: string;
+      tiny_version: string;
+      standard_version: string;
+      identity_statement: string;
+      cue_suggestion: string | null;
+      time_of_day: string;
+      duration_minutes: number;
+      current: number;
+      best: number;
+      repair_available: number;
+      completed: number;
+    }>();
+
+  return results.map((row) => ({
+    user_habit_id: row.user_habit_id,
+    habit_id: row.habit_id,
+    title: row.title,
+    category: row.category,
+    level: row.level,
+    tiny_version: row.tiny_version,
+    standard_version: row.standard_version,
+    identity_statement: row.identity_statement,
+    cue_suggestion: row.cue_suggestion,
+    custom_cue: row.custom_cue,
+    time_of_day: row.time_of_day,
+    duration_minutes: row.duration_minutes,
+    completed: row.completed === 1,
+    streak: {
+      current: row.current,
+      best: row.best,
+      repair_available: row.repair_available === 1,
+    },
+  }));
+}
