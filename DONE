@@ -1,0 +1,57 @@
+Run 1 — Foundation, Auth, and Habit Library — COMPLETE (2026-07-20)
+
+All 13 steps in PLAN.md finished, verified, committed, and pushed to
+origin/main. No blockers hit. The archived plan and full step-by-step log
+are at:
+
+  docs/runs/2026-07-20-foundation-auth-habit-library/PLAN.md
+  docs/runs/2026-07-20-foundation-auth-habit-library/PROGRESS.md
+
+A synthesized summary of what exists, the live endpoints, and a punch list
+for the next run is at:
+
+  docs/RUN-1-NOTES.md   <- start here
+
+## What this run built
+
+- Cloudflare Worker (Hono) + Vite/React/Tailwind PWA scaffold, wrangler.toml
+  with a habit-db D1 binding, vitest-pool-workers test harness.
+- Full D1 schema (all 12 CLAUDE.md §12 tables), cascading deletes verified.
+- Full habit library seeded: 364 habits across all 12 categories, a Zod
+  validator, and an idempotent seed loader.
+- Complete magic-link auth flow: request-link (rate limited, hashed
+  tokens) -> callback (single-use, creates/fetches user, sets session
+  cookie) -> requireAuth middleware -> protected GET /api/me, with the
+  multi-tenancy rule enforced and tested (user A cannot read user B's data).
+- Installable PWA shell: manifest, service worker, self-hosted rounded
+  fonts, Mascot component, a sign-in screen driving the whole auth flow.
+- Full verification sweep (build + test + validate:library) green in one
+  invocation; 26 tests passing across 8 files.
+
+## Recommended starting point for the next run
+
+Per docs/RUN-1-NOTES.md's punch list, in rough priority order:
+
+1. The daily rule-based suggestion engine (CLAUDE.md §6) — no AI
+   dependency, fully buildable and testable locally right now. Good next
+   PLAN.md target.
+2. Habit adoption / check-off / streaks (§7), including the never-miss-
+   twice streak-repair rule — schema and cascade behavior already exist
+   and are tested.
+3. A real dashboard UI consuming the seeded habit library and the
+   category accent colours that already exist as Tailwind tokens but are
+   currently unused.
+4. GDPR export-my-data / delete-my-account endpoints (§13) — the
+   cascading-delete behavior they depend on is already verified.
+
+## Needs a decision from Steven before it can be planned
+
+- The onboarding AI interview (§5) needs a Claude API key as a Worker
+  secret, which was explicitly out of scope for this local-only run. The
+  next run should decide: build it now behind a mock Claude client (same
+  pattern as this run's EmailSender interface, so it stays testable
+  without a live key), or defer it until a real key is available.
+- The CLAUDE.md §15 open decisions (final product name, subdomain
+  structure, Resend vs MailChannels, pricing intent, mascot sign-off) are
+  still unresolved and don't block further build work, but should be
+  settled before this gets closer to shipping.
