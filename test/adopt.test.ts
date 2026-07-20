@@ -219,3 +219,60 @@ describe("POST /api/habits/:id/adopt", () => {
     expect(res.status).toBe(201);
   });
 });
+
+describe("POST /api/habits/:id/dismiss", () => {
+  beforeEach(async () => {
+    await seedHabits();
+  });
+
+  it("returns 401 without a session", async () => {
+    const res = await SELF.fetch("https://example.com/api/habits/habit-1/dismiss", {
+      method: "POST",
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("marks the open suggestion as dismissed so the engine stops offering it", async () => {
+    const userId = await createUser();
+    const { token } = await createSession(env.DB, userId);
+    await env.DB.prepare(
+      "INSERT INTO suggestion_log (id, user_id, habit_id, score, score_breakdown, shown_at, local_date) VALUES (?, ?, 'habit-1', 5.0, '{}', '2026-07-15 08:00:00', '2026-07-15')",
+    )
+      .bind(crypto.randomUUID(), userId)
+      .run();
+
+    const res = await SELF.fetch("https://example.com/api/habits/habit-1/dismiss", {
+      method: "POST",
+      headers: { Cookie: `habit_session=${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const row = await env.DB.prepare(
+      "SELECT outcome FROM suggestion_log WHERE user_id = ? AND habit_id = 'habit-1'",
+    )
+      .bind(userId)
+      .first<{ outcome: string | null }>();
+    expect(row?.outcome).toBe("dismissed");
+  });
+
+  it("cannot dismiss another user's suggestion", async () => {
+    const userA = await createUser();
+    const userB = await createUser();
+    const { token: tokenA } = await createSession(env.DB, userA);
+    await env.DB.prepare(
+      "INSERT INTO suggestion_log (id, user_id, habit_id, score, score_breakdown, shown_at, local_date) VALUES (?, ?, 'habit-1', 5.0, '{}', '2026-07-15 08:00:00', '2026-07-15')",
+    )
+      .bind(crypto.randomUUID(), userB)
+      .run();
+
+    await SELF.fetch("https://example.com/api/habits/habit-1/dismiss", {
+      method: "POST",
+      headers: { Cookie: `habit_session=${tokenA}` },
+    });
+
+    const row = await env.DB.prepare("SELECT outcome FROM suggestion_log WHERE user_id = ?")
+      .bind(userB)
+      .first<{ outcome: string | null }>();
+    expect(row?.outcome).toBeNull();
+  });
+});

@@ -319,3 +319,28 @@ export async function getToday(
     },
   }));
 }
+
+/**
+ * Record that the user passed on a suggestion. The scoring engine's
+ * `declinedPenalty` reads exactly this outcome, so a dismissal is what stops a
+ * habit being offered again and again.
+ */
+export async function dismissSuggestion(
+  db: D1Database,
+  userId: string,
+  habitId: string,
+): Promise<{ ok: true; dismissed: boolean }> {
+  const result = await db
+    .prepare(
+      `UPDATE suggestion_log SET outcome = 'dismissed'
+        WHERE id = (
+          SELECT id FROM suggestion_log
+           WHERE user_id = ? AND habit_id = ? AND outcome IS NULL
+           ORDER BY shown_at DESC LIMIT 1
+        )`,
+    )
+    .bind(userId, habitId)
+    .run();
+
+  return { ok: true, dismissed: result.meta.changes > 0 };
+}

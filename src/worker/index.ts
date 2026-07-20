@@ -5,7 +5,7 @@ import { requireAuth } from "./auth-middleware";
 import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
 import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
 import { getSuggestions } from "./suggestions";
-import { adoptHabit, checkIn, getToday, undoCheckIn } from "./tracking";
+import { adoptHabit, checkIn, dismissSuggestion, getToday, undoCheckIn } from "./tracking";
 import type { Bindings, Variables } from "./types";
 
 export type { Bindings, Variables };
@@ -143,6 +143,19 @@ app.delete("/api/user-habits/:id/checkin", requireAuth, async (c) => {
   }
 
   return c.json({ removed: result.removed, streak: result.streak });
+});
+
+app.post("/api/habits/:id/dismiss", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const habitId = c.req.param("id");
+
+  if (!habitId) {
+    return c.json({ error: "unknown_habit" }, 404);
+  }
+
+  const result = await dismissSuggestion(c.env.DB, userId, habitId);
+
+  return c.json({ dismissed: result.dismissed });
 });
 
 app.get("/api/today", requireAuth, async (c) => {

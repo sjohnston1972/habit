@@ -412,3 +412,47 @@ Verified:
 - `npm test` → 18 test files, 178 passed (16 new + all 162 prior still green).
 
 Next step: Step 10 (the Today screen).
+
+### 2026-07-20 — Step 10: The Today screen — DONE
+
+Added `src/app/screens/Today.tsx`: mascot, streak summary ("Best streak going:
+N days · X of Y done today"), active habit cards from `GET /api/today`, and
+suggestions from `GET /api/suggestions` dealt out as cards with Adopt and
+"Not today" actions. Check-off and adopt update optimistically so a tap feels
+instant. `src/app/App.tsx` now resolves the session via `/api/me` and routes
+to `Today` when signed in, `SignIn` otherwise — deliberately deferring to
+`SignIn` while a magic-link token is still in the URL so the two don't race
+to redeem it.
+
+Added `src/app/components/SuggestionCard.tsx` (category accent bar, tiny-first
+copy, adopt/dismiss) and a `fadeInUp` keyframe in `index.css` with a staggered
+`animation-delay` so the three cards deal rather than appear at once. All of it
+behind `motion-safe:`; run 1's global reduced-motion rule covers the rest.
+
+**Endpoint the plan implied but never specified:** the dismiss action had
+nowhere to go. Added `POST /api/habits/:id/dismiss`, which marks the open
+`suggestion_log` row `dismissed` — the exact outcome the scoring engine's
+`declinedPenalty` already reads, so dismissing now genuinely stops a habit
+being re-offered. Covered by 3 tests in `test/adopt.test.ts` including
+cross-tenant isolation.
+
+**A real bug caught by writing the test first.** The check-off handler read
+`nowCompleted` out of a `setHabits` updater and used it to choose POST vs
+DELETE. React 18 need not have run that updater yet, so the method was
+computed from stale state — the UI looked right while the request was wrong.
+The screen now decides from the state it can already see and passes that into
+the updater. This is exactly the class of bug that tests-after would have
+missed, because the visible behaviour was correct.
+
+Added `test/app/today-screen.test.tsx` (10 tests) against a mocked fetch:
+active habits render, exactly three suggestions render, both together, streak
+summary, empty-state copy for a new user, adopt calls the right endpoint,
+dismiss removes just that card, the all-dealt-with message, check-off issues a
+POST to the right user_habit, and a friendly message when fetch throws.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 19 test files, 191 passed (13 new + all 178 prior still green).
+
+Next step: Step 11 (check-off feedback — confetti, haptics, repair and reset
+copy).
