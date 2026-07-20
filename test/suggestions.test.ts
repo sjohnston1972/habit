@@ -248,6 +248,69 @@ describe("getSuggestions", () => {
     expect(suggestions.map((s) => s.habit.id)).toContain("habit-1");
   });
 
+  it("returns the same three, in the same order, when called again the same day", async () => {
+    const userId = await createUser();
+
+    const first = await getSuggestions(env.DB, userId, NOW);
+    const second = await getSuggestions(env.DB, userId, new Date("2026-07-15T19:30:00Z"));
+
+    expect(second.map((s) => s.habit.id)).toEqual(first.map((s) => s.habit.id));
+    expect(second.map((s) => s.score)).toEqual(first.map((s) => s.score));
+    expect(second.map((s) => s.breakdown)).toEqual(first.map((s) => s.breakdown));
+  });
+
+  it("does not log a second impression when replaying the same day's suggestions", async () => {
+    const userId = await createUser();
+
+    await getSuggestions(env.DB, userId, NOW);
+    await getSuggestions(env.DB, userId, new Date("2026-07-15T19:30:00Z"));
+
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM suggestion_log WHERE user_id = ?")
+      .bind(userId)
+      .first<{ n: number }>();
+
+    expect(row?.n).toBe(3);
+  });
+
+  it("scores a fresh set once the user's local day rolls over", async () => {
+    const userId = await createUser();
+
+    const today = await getSuggestions(env.DB, userId, NOW);
+    const tomorrow = await getSuggestions(env.DB, userId, new Date("2026-07-16T08:00:00Z"));
+
+    // Yesterday's three are inside the 14-day novelty window now, so they lose
+    // to the habits that have never been shown.
+    expect(tomorrow.map((s) => s.habit.id)).toEqual(["habit-4", "habit-5", "habit-6"]);
+    expect(tomorrow.map((s) => s.habit.id)).not.toEqual(today.map((s) => s.habit.id));
+  });
+
+  it("keys the day on the user's timezone, not UTC", async () => {
+    // 19:00Z on the 15th is already the 16th in Auckland, so these two calls
+    // straddle a local midnight and must not share a suggestion set.
+    const userId = await createUser("Pacific/Auckland");
+
+    const before = await getSuggestions(env.DB, userId, new Date("2026-07-15T08:00:00Z"));
+    const after = await getSuggestions(env.DB, userId, new Date("2026-07-15T19:00:00Z"));
+
+    expect(after.map((s) => s.habit.id)).not.toEqual(before.map((s) => s.habit.id));
+  });
+
+  it("drops a suggestion the user has acted on without reshuffling the rest", async () => {
+    const userId = await createUser();
+
+    const first = await getSuggestions(env.DB, userId, NOW);
+    await env.DB.prepare(
+      "UPDATE suggestion_log SET outcome = 'adopted' WHERE user_id = ? AND habit_id = ?",
+    )
+      .bind(userId, first[0].habit.id)
+      .run();
+    await adopt(userId, first[0].habit.id);
+
+    const second = await getSuggestions(env.DB, userId, NOW);
+
+    expect(second.map((s) => s.habit.id)).toEqual([first[1].habit.id, first[2].habit.id]);
+  });
+
   it("computes the time bucket in the user's timezone, not the server's", async () => {
     // 08:00 UTC is 20:00 in Auckland — evening, so morning habits lose time_match.
     const aucklander = await createUser("Pacific/Auckland");

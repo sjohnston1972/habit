@@ -2,7 +2,7 @@ import { DEFAULT_PROFILE } from "../shared/default-profile";
 import { HabitSchema } from "../shared/habit";
 import { ProfileSchema, type Profile } from "../shared/profile";
 import { scoreHabit, type ScorableHabit, type ScoreBreakdown, type ScoringContext } from "../shared/scoring";
-import { bucketFor } from "../shared/time-of-day";
+import { bucketFor, localDateFor } from "../shared/time-of-day";
 
 /** How long a habit stays "recently suggested" and so loses its novelty credit. */
 const NOVELTY_WINDOW_DAYS = 14;
@@ -140,10 +140,49 @@ async function buildContext(
 }
 
 /**
- * Today's three suggestions, deterministically scored (CLAUDE.md §6). Every
- * suggestion returned is logged with its breakdown — that log is the tuning
- * data for Phase 3, and the reason a surprising suggestion can always be
- * explained after the fact.
+ * Suggestions already chosen for this user's local day, still awaiting a
+ * decision. Returning these rather than rescoring is what makes "today's three"
+ * mean something: the cards stay put across app opens, and `suggestion_log`
+ * records one impression per suggestion instead of one per page load.
+ *
+ * Rows with an outcome are left out — a habit the user has adopted or
+ * dismissed has been dealt with, and shouldn't reappear on the same day. The
+ * remaining cards keep their original order, so acting on one card never moves
+ * the others.
+ */
+async function replayTodaysSuggestions(
+  db: D1Database,
+  userId: string,
+  localDate: string,
+): Promise<Suggestion[] | null> {
+  const { results } = await db
+    .prepare(
+      `SELECT h.*, sl.score AS logged_score, sl.score_breakdown AS logged_breakdown, sl.outcome
+         FROM suggestion_log sl
+         JOIN habits h ON h.id = sl.habit_id
+        WHERE sl.user_id = ? AND sl.local_date = ?
+        ORDER BY sl.score DESC, sl.habit_id ASC`,
+    )
+    .bind(userId, localDate)
+    .all<HabitRow & { logged_score: number; logged_breakdown: string; outcome: string | null }>();
+
+  // No rows at all means today hasn't been scored yet — the caller should score.
+  if (results.length === 0) return null;
+
+  return results
+    .filter((row) => row.outcome === null)
+    .map((row) => ({
+      habit: toScorableHabit(row),
+      score: row.logged_score,
+      breakdown: JSON.parse(row.logged_breakdown) as ScoreBreakdown,
+    }));
+}
+
+/**
+ * Today's three suggestions, deterministically scored (CLAUDE.md §6). Scored
+ * once per local day and replayed thereafter. Every suggestion is logged with
+ * its breakdown — that log is the tuning data for Phase 3, and the reason a
+ * surprising suggestion can always be explained after the fact.
  */
 export async function getSuggestions(
   db: D1Database,
@@ -156,6 +195,12 @@ export async function getSuggestions(
     .first<{ timezone: string }>();
 
   if (!user) return [];
+
+  // The day boundary is the user's, not the server's (CLAUDE.md §7).
+  const localDate = localDateFor(now, user.timezone);
+
+  const alreadyChosen = await replayTodaysSuggestions(db, userId, localDate);
+  if (alreadyChosen) return alreadyChosen;
 
   const [profile, { ctx, adoptedHabitIds }] = await Promise.all([
     loadProfile(db, userId),
@@ -182,7 +227,7 @@ export async function getSuggestions(
       suggestions.map((suggestion) =>
         db
           .prepare(
-            "INSERT INTO suggestion_log (id, user_id, habit_id, score, score_breakdown, shown_at) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO suggestion_log (id, user_id, habit_id, score, score_breakdown, shown_at, local_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
           )
           .bind(
             crypto.randomUUID(),
@@ -191,6 +236,7 @@ export async function getSuggestions(
             suggestion.score,
             JSON.stringify(suggestion.breakdown),
             shownAt,
+            localDate,
           ),
       ),
     );

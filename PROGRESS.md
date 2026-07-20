@@ -193,3 +193,56 @@ Verified:
 
 Next step: Step 5 (streaks migration `0003_streak_repair_counter.sql` and
 `src/shared/streaks.ts` — `applyCheckin` as a pure function).
+
+### 2026-07-20 — Step 4a: Day-stable suggestions — DONE
+
+Not in PLAN.md. Added at Steven's explicit instruction in the interactive
+session, in response to the finding logged under step 4: suggestions
+reshuffled on every app open and logged a fresh impression each time.
+
+Added `migrations/0003_suggestion_log_local_date.sql`: a nullable
+`local_date TEXT` column on `suggestion_log` plus an index on
+`(user_id, local_date)`. `shown_at` is UTC and so cannot answer "was this
+shown on the user's today"; this mirrors how `checkins.local_date` already
+works. Nullable because pre-existing rows have no local date to backfill.
+
+`getSuggestions` now computes the user's local date, and if any
+`suggestion_log` rows exist for it, replays them — original order, stored
+score and breakdown, no new rows written — instead of rescoring. Scoring
+happens once per local day.
+
+Two sub-behaviours the instruction didn't specify, decided and recorded:
+
+1. **Rows with an outcome are filtered out of the replay.** A habit adopted
+   or dismissed today has been dealt with and shouldn't return as a card.
+   The survivors keep their original order, so acting on one card never
+   moves the others.
+2. **An emptied set is not refilled until the next local day.** If the user
+   acts on all three, they see no suggestions until tomorrow rather than a
+   fresh three. Refilling would reintroduce exactly the churn this step
+   removes, and the 5-habit cap means endless same-day adoption is not a
+   goal worth serving.
+
+**Knock-on for step 5:** this took migration number `0003`. The streak
+repair counter PLAN.md step 5 describes as `0003_streak_repair_counter.sql`
+must therefore be created as `0004_streak_repair_counter.sql`. Nothing else
+about step 5 changes.
+
+Written test-first: 5 new tests failed for the right reason before the
+migration and replay path existed. Added to `test/suggestions.test.ts`
+(22 tests total): same three in the same order when called again the same
+day; no second impression logged on replay; a fresh set once the local day
+rolls over; the day keyed on the user's timezone rather than UTC (two calls
+straddling Auckland's local midnight); and an acted-on suggestion dropping
+out without reshuffling the rest. Extended `test/schema.test.ts` to assert
+the `local_date` column exists.
+
+The plan's original done-condition wording — "repeated calls with the same
+fixture return the same habit ids in the same order" — now holds literally
+for the same user, not just for two users in identical states.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 12 test files, 111 passed (6 new + all 105 prior still green).
+
+Next step: Step 5, with the migration renumbered to `0004` as noted above.

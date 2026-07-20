@@ -25,4 +25,12 @@ describe("D1 schema migration", () => {
     const tableNames = results.map((row) => row.name).sort();
     expect(tableNames).toEqual([...EXPECTED_TABLES].sort());
   });
+
+  it("records the user's local date on suggestion_log so today's set is stable", async () => {
+    const { results } = await env.DB.prepare("PRAGMA table_info(suggestion_log)").all<{
+      name: string;
+    }>();
+
+    expect(results.map((row) => row.name)).toContain("local_date");
+  });
 });
