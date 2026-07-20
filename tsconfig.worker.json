@@ -17,5 +17,6 @@
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/worker", "src/shared", "test"]
+  "include": ["src/worker", "src/shared", "test"],
+  "exclude": ["test/app"]
 }

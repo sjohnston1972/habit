@@ -19,6 +19,10 @@ export default defineWorkersConfig(async () => {
       },
     },
     test: {
+      name: "worker",
+      // test/app/** runs under jsdom in the other workspace project — workerd
+      // has no DOM and no IndexedDB.
+      exclude: ["test/app/**", "**/node_modules/**"],
       setupFiles: ["./test/apply-migrations.ts"],
       poolOptions: {
         workers: {

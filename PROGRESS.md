@@ -363,3 +363,52 @@ Verified:
 
 Phase B complete. Next step: Step 9 (habit card component and category
 colours) — the first frontend step.
+
+### 2026-07-20 — Step 9: Habit card, category colours, and a second test environment — DONE
+
+**Infrastructure the plan implied but did not name.** Steps 10–13 require
+tests that render React and drive IndexedDB. Neither exists in workerd, which
+is where every test has run until now. Added `vitest.workspace.ts` with two
+projects: the existing `vitest.config.ts` (workerd, via vitest-pool-workers)
+for Worker and shared code, and a new `app` project (jsdom, `@vitejs/plugin-react`)
+for frontend code. The split is by directory — `test/app/**` is the browser
+side, everything else the Worker side — with `test/app/**` excluded from the
+worker project and from `tsconfig.worker.json`, plus a new
+`tsconfig.app-test.json` in the build chain so app tests are type-checked with
+`jsx` available. Testing Worker code against the real runtime was worth
+keeping; this preserves that while giving the frontend a DOM.
+
+New dev dependencies: `@testing-library/react`, `@testing-library/user-event`,
+`jsdom`, `fake-indexeddb` (step 12), and `canvas-confetti` + its types
+(step 11 — the only animation library CLAUDE.md §10 permits).
+
+Added `src/app/category-colors.ts`: all 12 categories mapped to their
+`category.*` Tailwind token names, plus `categoryToken()` which falls back to
+a usable token rather than throwing on an unknown category.
+
+Added `src/app/components/HabitCard.tsx`: chunky rounded card, 4px accent
+border in the category colour, sticker shadow, `min-h-[5.5rem]` tap target,
+title, level-appropriate version, identity statement, and streak. Rendered as
+a `<button>` with `aria-pressed`, so check-off state reaches assistive tech.
+Accepts a `pending` flag for step 13's unsynced indicator.
+
+Accent classes are stored as **complete class strings** rather than built by
+interpolation: Tailwind scans source text, so `bg-category-${token}` would
+compile to nothing. This is the run-1 palette's first real consumer.
+
+Added `test/app/category-colors.test.ts` (6 tests) and
+`test/app/habit-card.test.tsx` (10 tests), both test-first. Beyond the plan's
+asks, the colour tests assert every category maps to a distinct token and that
+no palette token is left orphaned; the card tests assert `aria-pressed`
+tracks completion and that **every** animation-related class is behind
+`motion-safe:` — a structural guard rather than a one-off check.
+
+Two build failures found and fixed along the way: the worker project was
+collecting `test/app/**`, and `tsc` was checking JSX under the worker config.
+Both are config fixes, not test edits.
+
+Verified:
+- `npm run build` → exits 0 (now four tsc passes).
+- `npm test` → 18 test files, 178 passed (16 new + all 162 prior still green).
+
+Next step: Step 10 (the Today screen).
