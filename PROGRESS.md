@@ -137,3 +137,59 @@ Verified:
 
 Next step: Step 4 (suggestion selection and `GET /api/suggestions` —
 `src/worker/suggestions.ts`, top 3 with `suggestion_log` writes).
+
+### 2026-07-20 — Step 4: Suggestion selection and the endpoint — DONE
+
+Added `src/worker/suggestions.ts`: `getSuggestions(db, userId, now)` loads the
+user's timezone and profile (falling back to `DEFAULT_PROFILE` when the row is
+absent *or* malformed), builds `ScoringContext` from D1, hard-filters adopted
+habits before scoring, scores all remaining candidates, sorts by score
+descending with `habit.id` ascending as tie-break, takes 3, and writes one
+`suggestion_log` row per suggestion with `score_breakdown` JSON via `db.batch`.
+Wired `GET /api/suggestions` behind `requireAuth` in `src/worker/index.ts`.
+
+All five context queries are scoped by the session-resolved `user_id`.
+`shown_at` is written in SQLite's `datetime()` text format so the 14-day
+novelty window compares lexicographically.
+
+Written test-first. Added `test/suggestions.test.ts` (17 tests): the five
+assertions the plan requires, plus profile fallback (absent and malformed),
+archived habits becoming suggestable again, the declined penalty and both
+sides of the 14-day novelty boundary, and timezone-derived bucketing.
+
+One test failed on first run — the stored-profile fixture supplied only 6 of
+the 12 categories, `ProfileSchema.strict()` rejected it, and the engine
+correctly fell back to defaults. The fixture was wrong, not the code; step 1's
+structural strictness is what caught it. Fixed the fixture.
+
+**Deviation from the plan's done-condition, stated plainly:** the plan asks
+that "repeated calls with the same fixture return the same habit ids in the
+same order". I implemented that as *two users in identical states get
+identical suggestions*, which is what determinism actually means here. The
+same user called twice does **not** return the same three, because the first
+call logs those habits to `suggestion_log` and the novelty term then scores
+them at zero. That is the specified novelty behaviour working as designed —
+but see the finding below, because it has a product consequence the plan
+did not anticipate.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 12 test files, 105 passed (17 new + all 88 prior still green).
+
+**Findings for Steven (no action taken — these need a decision):**
+
+- **Suggestions are not stable within a day.** `GET /api/suggestions` rescores
+  and re-logs on every call, so each app open shows a different three and
+  writes 3 more `suggestion_log` rows. Ten opens in a day = 30 rows and ten
+  different card sets. Step 10 calls this endpoint on mount, so the Today
+  screen will visibly reshuffle. Two consequences: the user never gets a
+  stable "today's three" to commit to, and the Phase 3 tuning data is
+  inflated by impressions that were never really separate suggestions. The
+  fix is to return the already-logged set when one exists for the user's
+  local date, and only score when there isn't — but that is a branch neither
+  PLAN.md nor the design spec describes, so I have not invented it.
+- Carried forward from step 3, unchanged: random habit ids at seed time, and
+  `avoid_tags` being collected but unused.
+
+Next step: Step 5 (streaks migration `0003_streak_repair_counter.sql` and
+`src/shared/streaks.ts` — `applyCheckin` as a pure function).

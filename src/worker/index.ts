@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuth } from "./auth-middleware";
 import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
 import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
+import { getSuggestions } from "./suggestions";
 import type { Bindings, Variables } from "./types";
 
 export type { Bindings, Variables };
@@ -72,6 +73,13 @@ app.get("/api/me", requireAuth, async (c) => {
   }
 
   return c.json({ user });
+});
+
+app.get("/api/suggestions", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const suggestions = await getSuggestions(c.env.DB, userId, new Date());
+
+  return c.json({ suggestions });
 });
 
 export default app;
