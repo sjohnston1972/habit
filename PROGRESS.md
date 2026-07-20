@@ -119,3 +119,47 @@ Committed as `7dcff47` and pushed to `origin/main` successfully.
 Next step: Step 5 (Habit library — schema, validator, and one category:
 define the habit record type + Zod validator, write `seed/exercise-movement.json`
 with ≥30 habits, `npm run validate:library` script).
+
+### 2026-07-20 — Step 5: Habit library — schema, validator, one category — DONE
+
+Added `src/shared/habit.ts`: the `Habit` type + `HabitSchema` Zod validator
+covering every CLAUDE.md §4 field, with `CATEGORIES` (all 12 category
+labels) and `TIME_OF_DAY` (`morning | midday | evening | anytime`) as
+enums. Enforces non-empty `title`/`identity_statement`/`tiny_version`/
+`standard_version`, `difficulty` restricted to `1 | 2 | 3`,
+`duration_minutes` a positive integer, and `category`/`time_of_day` in
+their allowed sets. `tags`/`stack_anchors` default to `[]`,
+`frequency_default` defaults to `"daily"`, `ambitious_version`/
+`cue_suggestion`/`prerequisites` are optional (most habits have none, per
+spec).
+
+Wrote `seed/exercise-movement.json` with 32 Exercise & Movement habits —
+walking, stretching, strength, cardio, balance, and low-impact/seated
+variants so the category doesn't assume a single body type or ability
+level. Every habit has a genuinely ≤2-minute `tiny_version` (e.g. "Do 1
+push-up (knees down is great)", "Circle each ankle 5 times"). No medical
+claims.
+
+Added `scripts/validate-library.ts` (`npm run validate:library`): reads all
+`seed/*.json`, validates every entry against `HabitSchema`, flags duplicate
+titles across files, and prints total + per-category counts. Exit code
+reflects only schema/duplicate errors — the ≥30/≥350 count thresholds from
+steps 5 and 6 are read off the printed report rather than hard-coded into
+the script, since the two steps have different bars against the same tool.
+
+Needed a separate `tsconfig.scripts.json` (Node-typed: `types: ["node"]`)
+for `scripts/` — the existing `tsconfig.worker.json` is Workers-typed and
+the two global type sets collide. Added `@types/node` as a devDependency
+and a third `tsc --noEmit` pass to the `build` script.
+
+Verified:
+- `npm run validate:library` → exit 0, reports 32 total habits, all 32 under
+  "Exercise & Movement", 0 in the other 11 categories (expected — not yet
+  written), "Library valid."
+- `npm test` → 3 test files, 3 passed (unaffected by this step).
+- `npm run build` → exits 0 (now 3 tsc passes + vite build).
+
+Committed as `b9ee922` and pushed to `origin/main` successfully.
+
+Next step: Step 6 (Habit library — remaining 11 categories, 30-40 habits
+each, ≥350 total, zero duplicate titles across all 12 files).
