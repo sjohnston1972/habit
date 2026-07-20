@@ -346,3 +346,49 @@ describe("POST /api/onboarding/turn", () => {
     expect(JSON.parse(row!.transcript).answers).toHaveLength(0);
   });
 });
+
+// Step 17's confirmation, as a test rather than an assertion: the profile the
+// interview writes is the one the engine scores against, with no engine change.
+describe("onboarding feeds the suggestion engine", () => {
+  it("scores suggestions against the profile the interview produced", async () => {
+    const { getSuggestions } = await import("../src/worker/suggestions");
+
+    const userId = await createUser();
+    for (const [index, category] of ["Work & Focus", "Sleep & Rest"].entries()) {
+      await env.DB.prepare(
+        `INSERT INTO habits (id, library_version, title, category, tags, identity_statement,
+           tiny_version, standard_version, time_of_day, duration_minutes, difficulty,
+           frequency_default, stack_anchors)
+         VALUES (?, 1, ?, ?, '[]', 'I am someone', 'Tiny', 'Standard', 'morning', 10, 1, 'daily', '[]')`,
+      )
+        .bind(`habit-${index + 1}`, `Habit ${index + 1}`, category)
+        .run();
+    }
+
+    // An interview whose model output favours "Sleep & Rest" over everything else.
+    await completeInterview(userId, {
+      create: async () => ({
+        profile: {
+          category_scores: Object.fromEntries(
+            CATEGORIES.map((c) => [c, c === "Sleep & Rest" ? 100 : 0]),
+          ),
+          capacity_minutes_per_day: 20,
+          preferred_times: ["morning"],
+          identity_goals: [],
+          avoid_tags: [],
+          notes: "",
+        },
+        tokens: 90,
+      }),
+    });
+
+    const suggestions = await getSuggestions(env.DB, userId, new Date("2026-07-15T08:00:00Z"));
+
+    // habit-2 is the Sleep & Rest one. Without the stored profile it would lose
+    // to habit-1 on the id-ascending tie-break.
+    expect(suggestions[0].habit.id).toBe("habit-2");
+    expect(suggestions[0].breakdown.categoryFit).toBeGreaterThan(
+      suggestions[1].breakdown.categoryFit,
+    );
+  });
+});

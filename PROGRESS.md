@@ -627,3 +627,27 @@ Verified:
 - `test/onboarding.test.ts` → 20 passed.
 
 Next step: Step 17 (full verification sweep and run notes).
+
+### 2026-07-20 — Step 17: Full verification sweep and run notes — DONE
+
+Ran `npm run build && npm test && npm run validate:library` in one invocation.
+All three exit 0:
+
+- `npm run build` → 4 tsc passes + vite build, exits 0.
+- `npm test` → **25 test files, 259 tests, all passing.**
+- `npm run validate:library` → "Library valid." (364 habits, 12 categories).
+
+**Confirmed the engine reads the real onboarding profile with no engine
+change** — and confirmed it *as a test*, not an assertion. Added a final case
+to `test/onboarding.test.ts`: an interview whose model output scores
+"Sleep & Rest" at 100 and everything else at 0 causes `getSuggestions` to rank
+the Sleep & Rest habit first, beating the id-ascending tie-break that would
+otherwise have won. No code in `src/shared/scoring.ts` or
+`src/worker/suggestions.ts` was touched to make this pass — the engine reads
+whatever profile it is handed, exactly as the design spec predicted.
+
+Wrote `docs/RUN-2-NOTES.md` in the shape of `docs/RUN-1-NOTES.md`: what
+exists, the endpoint table, migrations (including the 0003/0004 renumber), the
+two-project test setup, and a punch list for run 3 ordered by consequence.
+
+All 17 planned steps plus step 4a are complete.
