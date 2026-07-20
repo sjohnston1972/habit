@@ -92,3 +92,30 @@ Committed as `f9ba702` and pushed to `origin/main` successfully.
 
 Next step: Step 4 (Cascading-delete test — create a user with rows in every
 child table, delete the user, assert every child row is gone).
+
+### 2026-07-20 — Step 4: Cascading-delete test — DONE
+
+Added `test/cascade-delete.test.ts`. It creates one user plus one row in
+every user-owned child table (`sessions`, `profiles`, `stacks`,
+`user_habits`, `checkins`, `streaks`, `qa_sessions`, `suggestion_log`,
+`push_subscriptions` — via a `habit`/`stack`/`user_habit` chain so
+`checkins`/`streaks` are reachable through `user_habits.id`), asserts all
+those rows exist, deletes the user, then asserts every one of those rows is
+gone. It also asserts the `habits` row itself survives, since the library is
+not user-owned and must not be swept up by the cascade. `magic_links` is
+correctly excluded — it has no `user_id` FK by design (a magic link exists
+before an account does; it's keyed by email).
+
+No `PRAGMA foreign_keys` handling was needed — D1/Miniflare enforces FK
+constraints (and `ON DELETE CASCADE`/`SET NULL`) by default, confirmed
+empirically by this test passing against the real schema with no extra setup.
+
+Verified:
+- `npm test` → 3 test files (`health`, `schema`, `cascade-delete`), 3 passed.
+- `npm run build` → still exits 0.
+
+Committed as `7dcff47` and pushed to `origin/main` successfully.
+
+Next step: Step 5 (Habit library — schema, validator, and one category:
+define the habit record type + Zod validator, write `seed/exercise-movement.json`
+with ≥30 habits, `npm run validate:library` script).
