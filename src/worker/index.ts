@@ -5,6 +5,7 @@ import { requireAuth } from "./auth-middleware";
 import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
 import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
 import { getSuggestions } from "./suggestions";
+import { adoptHabit, checkIn, undoCheckIn } from "./tracking";
 import type { Bindings, Variables } from "./types";
 
 export type { Bindings, Variables };
@@ -80,6 +81,68 @@ app.get("/api/suggestions", requireAuth, async (c) => {
   const suggestions = await getSuggestions(c.env.DB, userId, new Date());
 
   return c.json({ suggestions });
+});
+
+app.post("/api/habits/:id/adopt", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const habitId = c.req.param("id");
+
+  if (!habitId) {
+    return c.json({ error: "unknown_habit" }, 404);
+  }
+
+  const result = await adoptHabit(c.env.DB, userId, habitId);
+
+  if (!result.ok) {
+    return c.json({ error: result.reason }, result.reason === "unknown_habit" ? 404 : 409);
+  }
+
+  return c.json({ user_habit_id: result.userHabitId }, 201);
+});
+
+// The offline queue may replay a check-off made on an earlier local date, so
+// the client can name that date; the server still verifies ownership itself.
+const checkinBodySchema = z.object({ local_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).partial();
+
+app.post("/api/user-habits/:id/checkin", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = checkinBodySchema.safeParse(body ?? {});
+
+  if (!parsed.success) {
+    return c.json({ error: "invalid_local_date" }, 400);
+  }
+
+  const userHabitId = c.req.param("id");
+
+  if (!userHabitId) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  const result = await checkIn(c.env.DB, userId, userHabitId, new Date(), parsed.data.local_date);
+
+  if (!result.ok) {
+    return c.json({ error: result.reason }, 404);
+  }
+
+  return c.json({ outcome: result.outcome, streak: result.streak, local_date: result.localDate });
+});
+
+app.delete("/api/user-habits/:id/checkin", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const userHabitId = c.req.param("id");
+
+  if (!userHabitId) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  const result = await undoCheckIn(c.env.DB, userId, userHabitId, new Date());
+
+  if (!result.ok) {
+    return c.json({ error: result.reason }, 404);
+  }
+
+  return c.json({ removed: result.removed, streak: result.streak });
 });
 
 export default app;

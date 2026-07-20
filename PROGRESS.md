@@ -281,3 +281,59 @@ Verified:
 
 Next step: Step 6 (adoption endpoint — `src/worker/tracking.ts`,
 `POST /api/habits/:id/adopt`).
+
+### 2026-07-20 — Steps 6 & 7: Adoption, check-off and undo — DONE
+
+Committed together rather than one commit per step: both live in
+`src/worker/tracking.ts`, and step 7's route work exposed a type error in
+step 6's route that had to be fixed in the same edit. Both were verified
+green before committing.
+
+**Step 6 — adoption.** `adoptHabit(db, userId, habitId)` inserts the
+`user_habits` row at level `tiny`, creates the `streaks` row zeroed but with
+`repair_available = 1`, and marks the most recent `suggestion_log` row for
+that habit as `adopted` — all three in one `db.batch`. Rejects an unknown
+habit with 404 and the 6th active habit with 409 `habit_cap_reached`,
+counting only rows where `archived_at IS NULL`. Wired
+`POST /api/habits/:id/adopt` behind `requireAuth`, returning 201.
+
+Not in the plan, added deliberately: **adopting the same habit twice returns
+409 `already_adopted`.** `user_habits` has no unique constraint on
+(user_id, habit_id), so without this guard a double tap would give the user
+the same habit twice with two independent streaks. Flagged rather than
+silently assumed — a DB-level constraint would be the sturdier fix and is
+worth considering in run 3.
+
+**Step 7 — check-off and undo.** `checkIn` resolves the user_habit and proves
+ownership in one query, computes the local date in the user's timezone,
+`INSERT OR IGNORE`s the check-in, and applies `applyCheckin` only when a row
+was actually inserted — so re-posting the same local date returns 200 with
+outcome `noop` and leaves the streak untouched, exactly as steps 12–13 need.
+The route accepts an optional `local_date` in the body so the offline queue
+can replay a check-off made on an earlier day; ownership is still proven
+server-side and the date is regex-validated.
+
+`undoCheckIn` deletes the local date's check-in and then **recomputes the
+streak by replaying the entire check-in history** through `applyCheckin`,
+rather than trying to invert the last increment. Inversion is not possible in
+general — the removed check-in may have consumed a repair, reset a streak, or
+raised `best`. Replay is exact precisely because `applyCheckin` is pure, which
+is the payoff for step 5's design.
+
+A type error surfaced during this step: `c.req.param("id")` is
+`string | undefined` under this tsconfig. Guarded with an explicit 404 in all
+three routes rather than casting the type away.
+
+Added `test/adopt.test.ts` (10 tests) and `test/checkin.test.ts` (14 tests),
+both test-first and both red for the right reason first. Between them they
+cover every assertion the plan lists, plus: archiving freeing a cap slot,
+per-user cap isolation, double-adopt, reset reporting, timezone-derived local
+dates, undo restoring a consumed repair, undo of the only check-in returning
+to zero, undo with nothing to undo, and 404s for both unknown and
+someone-else's user_habit ids.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 15 test files, 151 passed (24 new + all 127 prior still green).
+
+Next step: Step 8 (`GET /api/today`).
