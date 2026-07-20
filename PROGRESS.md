@@ -53,3 +53,33 @@ Committed as `b5843c4` and pushed to `origin/main` successfully.
 Next step: Step 2 (Time-of-day bucketing — `src/shared/time-of-day.ts`
 exporting `bucketFor` and `localDateFor`, both timezone-aware via
 `Intl.DateTimeFormat`).
+
+### 2026-07-20 — Step 2: Time-of-day bucketing — DONE
+
+Added `src/shared/time-of-day.ts`:
+
+- `bucketFor(date, timezone): "morning" | "midday" | "evening"` — 05–10
+  morning, 11–16 midday, 17–21 and 22–04 evening. Reads the local hour via
+  `Intl.DateTimeFormat("en-GB", { hour12: false })`, never the server clock.
+  Guards the ICU `"24"`-for-midnight rendering with `% 24`.
+- `localDateFor(date, timezone): string` — `YYYY-MM-DD` via the `en-CA`
+  locale, which formats zero-padded in exactly that shape.
+- Exports a `Bucket` type for steps 3–4 to consume.
+
+Written test-first. The test failed for the right reason (module absent),
+and writing the assertions first caught a genuine error in my own arithmetic
+before any implementation existed: I had asserted 18:00Z was morning in
+`America/Los_Angeles` when it is 11:00 local, i.e. midday. Corrected in the
+test, then implemented.
+
+Added `test/time-of-day.test.ts` (31 tests): every hour 00–23 against `UTC`,
+plus `Pacific/Auckland` (UTC+12) and `America/Los_Angeles` (UTC-7) covering
+both directions of date rollover, a same-instant-different-bucket case across
+three zones, and zero-padding of single-digit months and days.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 10 test files, 60 passed (31 new + all 29 prior still green).
+
+Next step: Step 3 (the scoring function — `src/shared/scoring.ts`, one test
+per term with the others held constant, plus a determinism test).
