@@ -57,3 +57,38 @@ Committed as `356a031` and pushed to `origin/main` successfully.
 Next step: Step 3 (D1 schema migration — `migrations/0001_init.sql` covering
 all 12 tables from CLAUDE.md §12, cascading FKs, unique index on
 `checkins (user_habit_id, local_date)`).
+
+### 2026-07-20 — Step 3: D1 schema migration — DONE
+
+Wrote `migrations/0001_init.sql` covering all 12 tables from CLAUDE.md §12
+(`users` with nullable `plan` and `active_habit_cap` default 5, `sessions`,
+`magic_links`, `habits`, `profiles`, `user_habits`, `stacks`, `checkins`,
+`streaks`, `qa_sessions`, `suggestion_log`, `push_subscriptions`). All
+user-owned FKs use `ON DELETE CASCADE` (habit→user_habits→checkins/streaks
+chains cascade transitively); `user_habits.stack_id` uses `ON DELETE SET
+NULL` since deleting a stack shouldn't delete the habits in it. Unique index
+on `checkins (user_habit_id, local_date)` as required.
+
+Wired the migration into the test harness using the official
+`readD1Migrations` (config-side)/`applyD1Migrations` (worker-side) helpers
+from `@cloudflare/vitest-pool-workers`, via a `test/apply-migrations.ts`
+`setupFiles` entry and a `TEST_MIGRATIONS` miniflare binding in
+`vitest.config.ts`. Added `test/env.d.ts` to type the `cloudflare:test` env
+(extends the Worker's `Bindings` plus `TEST_MIGRATIONS`).
+
+Verified:
+- `npm exec -- wrangler d1 execute habit-db --local --file migrations/0001_init.sql`
+  → exit 0, "22 commands executed successfully" (first run against a clean
+  local D1; local D1 state lives under gitignored `.wrangler/state`, so a
+  fresh clone always starts from zero and this exit-0 run is the true signal
+  — re-running the raw SQL a second time correctly fails with "table users
+  already exists", since this migration is a one-shot file, not idempotent).
+- `npm test` → 2 test files (`health.test.ts`, `schema.test.ts`), 2 passed —
+  the schema test queries `sqlite_master` and asserts exactly the 12 expected
+  table names exist.
+- `npm run build` → still exits 0.
+
+Committed as `f9ba702` and pushed to `origin/main` successfully.
+
+Next step: Step 4 (Cascading-delete test — create a user with rows in every
+child table, delete the user, assert every child row is gone).
