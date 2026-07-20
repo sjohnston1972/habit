@@ -83,3 +83,57 @@ Verified:
 
 Next step: Step 3 (the scoring function — `src/shared/scoring.ts`, one test
 per term with the others held constant, plus a determinism test).
+
+### 2026-07-20 — Step 3: The scoring function — DONE
+
+Added `src/shared/scoring.ts`: `scoreHabit(habit, profile, ctx)` returning
+`{ score, breakdown }`. Pure — no clock, no D1, no mutation of its inputs.
+Term formulas, each normalised to 0..1 before weighting:
+
+| Term | Formula |
+|---|---|
+| `categoryFit` | `category_scores[habit.category] / 100` |
+| `timeMatch` | 1 if `time_of_day` is the current bucket or `anytime`, else 0 |
+| `capacityFit` | 1 up to capacity, linear to 0 at 2x capacity, clamped |
+| `balanceBonus` | `1 / (1 + activeInCategory)` |
+| `novelty` | 0 if suggested in last 14 days, else 1 |
+| `progression` | `1 - |difficulty - ideal| / 2`, ideal = 1 / 2 / 3 at streak <7 / 7-29 / 30+ |
+| `declinedPenalty` | 1 if previously dismissed, else 0 |
+
+Two decisions the plan left open, both recorded here because they are the
+kind of thing that is invisible later:
+
+1. **`ScorableHabit = Habit & { id: string }`.** The plan's signature takes
+   `Habit`, but `Habit` (the Zod seed shape) carries no `id`, and the
+   novelty/declined terms need one. `ScorableHabit` is the D1 row shape —
+   seed fields plus primary key — and still satisfies the plan's signature.
+2. **`breakdown` holds *weighted* contributions, not raw 0..1 terms**, so
+   the parts sum exactly to the whole and a `suggestion_log` row explains
+   its own score without needing the weights that produced it. The tradeoff
+   is noted below as a run-3 finding.
+
+Written test-first; the test failed for the right reason (module absent).
+Added `test/scoring.test.ts` (28 tests): one describe block per term
+isolating it against a neutral fixture, plus the sum-equals-total invariant,
+a determinism test asserting deep equality across repeated calls, and a
+no-mutation test.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 11 test files, 88 passed (28 new + all 60 prior still green).
+
+**Findings for run 3 (not blockers, no action taken this run):**
+
+- `scripts/seed.ts:26` assigns habit ids with `crypto.randomUUID()` at seed
+  time, so ids are not stable across re-seeds. Step 4 tie-breaks on
+  `habit.id` ascending, which stays deterministic *within* a seeding but
+  will reshuffle equal-scoring habits after any re-seed — and existing
+  `suggestion_log` / `user_habits` rows would point at ids the new library
+  no longer has. A deterministic id (slug or content hash) is the fix.
+- `Profile.avoid_tags` is collected by the schema but no scoring term
+  consumes it. Neither the plan nor the design spec lists it as a term or a
+  filter, so I have not invented one. It needs a decision from Steven:
+  hard filter, or a penalty term with a weight.
+
+Next step: Step 4 (suggestion selection and `GET /api/suggestions` —
+`src/worker/suggestions.ts`, top 3 with `suggestion_log` writes).
