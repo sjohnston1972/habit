@@ -163,3 +163,45 @@ Committed as `b9ee922` and pushed to `origin/main` successfully.
 
 Next step: Step 6 (Habit library — remaining 11 categories, 30-40 habits
 each, ≥350 total, zero duplicate titles across all 12 files).
+
+### 2026-07-20 — Step 6: Habit library — remaining 11 categories — DONE
+
+Wrote `seed/*.json` for the remaining 11 CLAUDE.md §4 categories: Nutrition
+& Hydration, Sleep & Rest, Mental Health & Mindfulness, Home & Housework,
+Money & Admin, Relationships & Social, Work & Focus, Learning & Growth,
+Digital Hygiene, Outdoors & Nature, Health & Self-care — 30-32 habits each,
+following the same shape as step 5's Exercise & Movement file. Every habit
+has a genuinely ≤2-minute `tiny_version`; phrasing stays encouraging and
+concrete; no medical claims (a "take your supplement or medication as
+directed" habit exists but only as a routine reminder, deferring to
+professional direction, not prescribing anything itself); no diet
+prescriptions (nutrition habits favour hydration/variety/mindful-eating
+framing over restriction); no assumptions about physical ability (Exercise
+& Movement includes seated/wall/low-impact variants alongside running and
+hiking).
+
+Caught one cross-category title collision during writing — "Read before
+bed" existed in both `sleep-rest.json` and `learning-growth.json` (the
+latter deliberately matches the CLAUDE.md §4 worked example verbatim).
+Renamed the Sleep & Rest entry to "Swap screens for a book at bedtime" to
+keep titles globally unique, since `validate:library`'s duplicate check is
+across all seed files, not just within one category.
+
+First `validate:library` run came in under the per-category bar (356 total,
+but several categories at 28-29, not the required ≥30) — added one extra
+habit to Home & Housework, Money & Admin, Work & Focus, Learning & Growth,
+Digital Hygiene, and Health & Self-care, and two extra to Outdoors & Nature,
+to bring every category to exactly 30+.
+
+Verified:
+- `npm run validate:library` → exit 0, 364 total habits, every one of the
+  12 categories at 30-32, "Library valid." (zero duplicate titles, zero
+  schema errors).
+- `npm run build` → still exits 0.
+- `npm test` → 3 test files, 3 passed (unaffected by this step).
+
+Committed as `74c6d1a` and pushed to `origin/main` successfully.
+
+Next step: Step 7 (Seed loader — script to load all seed JSON into the
+`habits` table with `library_version`, idempotent re-runs, asserted by a
+test).
