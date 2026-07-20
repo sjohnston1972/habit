@@ -277,8 +277,15 @@ streak increment. `npm run build && npm test` exits 0.
 
 ### Step 14: Key preflight — STOP HERE IF IT FAILS
 
-Before writing any AI code, verify the key works with one minimal live call
-(`claude-haiku-4-5`, `max_tokens: 16`, message "ping").
+The plumbing is already done and verified (2026-07-20, interactive session):
+`vitest.config.ts` loads `.env` via Vite's `loadEnv` and passes
+`ANTHROPIC_API_KEY` through as a Miniflare binding, and `Bindings` in
+`src/worker/types.ts` declares it. Read it as `env.ANTHROPIC_API_KEY` from
+`cloudflare:test` in tests, or `c.env.ANTHROPIC_API_KEY` in the Worker. It is
+an empty string when unset — check before use.
+
+Verify the key works with one minimal live call (`claude-haiku-4-5`,
+`max_tokens: 16`, message "ping").
 
 **If the call fails for any reason** — missing key, auth error, rate limit —
 write a `Blockers` entry in PROGRESS.md naming the exact error, commit, push, and
