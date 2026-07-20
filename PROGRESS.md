@@ -205,3 +205,47 @@ Committed as `74c6d1a` and pushed to `origin/main` successfully.
 Next step: Step 7 (Seed loader — script to load all seed JSON into the
 `habits` table with `library_version`, idempotent re-runs, asserted by a
 test).
+
+### 2026-07-20 — Step 7: Seed loader — DONE
+
+Added `src/shared/seed-data.ts`: statically imports all 12 `seed/*.json`
+files (native ESM JSON imports, resolved at bundle time — no filesystem
+access needed, which matters because the Workers runtime has none),
+validates every entry through `HabitSchema`, and exports `ALL_HABITS` (364
+habits) + `LIBRARY_VERSION` (currently `1`).
+
+Added `src/worker/seed.ts`: `seedHabits(db, habits, libraryVersion)` —
+deletes all existing rows in `habits`, then batch-inserts the full habit
+list fresh with new UUIDs. Idempotent by construction: every run replaces
+the whole table rather than appending, so row count never drifts on
+re-runs regardless of how many times it's called.
+
+Added `test/seed.test.ts`: calls `seedHabits(env.DB)` twice against a real
+migrated D1 binding and asserts both calls return `ALL_HABITS.length`
+inserted and the table's actual row count matches after each call — this is
+the direct test of the "running the seed twice leaves the same row count"
+requirement. Had to add a `resolve.alias` for `@shared` to `vitest.config.ts`
+— it was only configured in the app's `vite.config.ts` before, so
+`src/worker/seed.ts`'s `@shared/*` imports didn't resolve under
+vitest-pool-workers.
+
+Added `scripts/seed.ts` (`npm run seed`): a Node CLI for manual local
+seeding — generates the same DELETE+INSERT SQL from `ALL_HABITS` and runs
+it via the local `wrangler` bin (`node <path>/wrangler/bin/wrangler.js d1
+execute habit-db --local --file <generated .sql>`), avoiding both `npx`
+(EBUSY) and any direct D1 binding access from plain Node (which doesn't
+exist outside the Workers runtime).
+
+Verified:
+- `npm test` → 4 test files, 4 passed, including `seed.test.ts`.
+- `npm run build` → still exits 0.
+- `npm run seed` run twice against the local D1 database, then
+  `wrangler d1 execute habit-db --local --command "SELECT COUNT(*) FROM habits"`
+  → 364 both times, confirming idempotency at the CLI level too, not just
+  inside the test.
+
+Committed as `f9097f2` and pushed to `origin/main` successfully.
+
+Next step: Step 8 (Session layer — `sessions` table helpers: create,
+look up by hashed token, 30-day rolling expiry, delete; tests for
+create/lookup/expiry/renewal).
