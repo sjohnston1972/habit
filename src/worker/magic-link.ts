@@ -69,3 +69,62 @@ export async function requestMagicLink(
 
   return { ok: true };
 }
+
+interface MagicLinkRow {
+  id: string;
+  email: string;
+  expires_at: string;
+  used_at: string | null;
+}
+
+export type RedeemMagicLinkResult =
+  | { ok: true; userId: string }
+  | { ok: false; reason: "invalid" | "expired" | "used" };
+
+async function findOrCreateUser(db: D1Database, email: string): Promise<string> {
+  const existing = await db
+    .prepare("SELECT id FROM users WHERE email = ?")
+    .bind(email)
+    .first<{ id: string }>();
+
+  if (existing) return existing.id;
+
+  const id = crypto.randomUUID();
+  const displayName = email.split("@")[0];
+  await db
+    .prepare("INSERT INTO users (id, email, display_name, timezone) VALUES (?, ?, ?, ?)")
+    .bind(id, email, displayName, "UTC")
+    .run();
+
+  return id;
+}
+
+// Single-use: a token that's already been redeemed is rejected ("used"), not
+// silently re-accepted. A token that's expired or was never issued both
+// return "invalid"/"expired" — never the raw stored value, so this can't
+// leak whether a given token ever existed.
+export async function redeemMagicLink(db: D1Database, token: string): Promise<RedeemMagicLinkResult> {
+  const tokenHash = await sha256Hex(token);
+  const row = await db
+    .prepare("SELECT id, email, expires_at, used_at FROM magic_links WHERE token_hash = ?")
+    .bind(tokenHash)
+    .first<MagicLinkRow>();
+
+  if (!row) {
+    return { ok: false, reason: "invalid" };
+  }
+  if (row.used_at !== null) {
+    return { ok: false, reason: "used" };
+  }
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    return { ok: false, reason: "expired" };
+  }
+
+  await db
+    .prepare("UPDATE magic_links SET used_at = ? WHERE id = ?")
+    .bind(new Date().toISOString(), row.id)
+    .run();
+
+  const userId = await findOrCreateUser(db, row.email);
+  return { ok: true, userId };
+}

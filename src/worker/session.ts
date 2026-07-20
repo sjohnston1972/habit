@@ -1,6 +1,7 @@
 import { sha256Hex } from "./hash";
 
-const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, per CLAUDE.md §3
+export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, per CLAUDE.md §3
+export const SESSION_COOKIE_NAME = "habit_session";
 
 export interface Session {
   id: string;

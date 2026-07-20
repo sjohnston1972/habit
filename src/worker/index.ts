@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { setCookie } from "hono/cookie";
 import { z } from "zod";
-import { ConsoleEmailSender, requestMagicLink } from "./magic-link";
+import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
+import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
 
 export type Bindings = {
   DB: D1Database;
@@ -26,6 +28,31 @@ app.post("/api/auth/request-link", async (c) => {
   if (!result.ok) {
     return c.json({ error: result.reason }, 429);
   }
+
+  return c.json({ ok: true });
+});
+
+app.get("/api/auth/callback", async (c) => {
+  const token = c.req.query("token");
+
+  if (!token) {
+    return c.json({ error: "invalid" }, 400);
+  }
+
+  const redeemed = await redeemMagicLink(c.env.DB, token);
+  if (!redeemed.ok) {
+    return c.json({ error: redeemed.reason }, 400);
+  }
+
+  const { token: sessionToken } = await createSession(c.env.DB, redeemed.userId);
+
+  setCookie(c, SESSION_COOKIE_NAME, sessionToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: SESSION_DURATION_MS / 1000,
+  });
 
   return c.json({ ok: true });
 });
