@@ -472,3 +472,82 @@ Committed as `8b2bbba` and pushed to `origin/main` successfully.
 Next step: Step 13 (Full verification sweep — run `npm run build && npm
 test && npm run validate:library` clean in one invocation, paste the
 output into PROGRESS.md, and write `docs/RUN-1-NOTES.md` for the next run).
+
+### 2026-07-20 — Step 13: Full verification sweep — DONE
+
+Ran `npm run build && npm test && npm run validate:library` as a single
+invocation. All three exited 0:
+
+```
+> clydeford-habits@0.1.0 build
+> tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.scripts.json && vite build
+
+vite v5.4.21 building for production...
+✓ 34 modules transformed.
+../../dist/registerSW.js                                          0.13 kB
+../../dist/manifest.webmanifest                                   0.40 kB
+../../dist/index.html                                             0.59 kB │ gzip:  0.35 kB
+../../dist/assets/index-B10rItup.css                              11.66 kB │ gzip:  2.90 kB
+../../dist/assets/index-r6Luy6C6.js                              144.71 kB │ gzip: 46.85 kB
+(plus 27 self-hosted @fontsource woff/woff2 font files)
+✓ built in 4.24s
+
+PWA v0.21.2
+mode      generateSW
+precache  7 entries (153.42 KiB)
+files generated
+  ../../dist/sw.js
+  ../../dist/workbox-9c191d2f.js
+
+> clydeford-habits@0.1.0 test
+> vitest run
+
+ ✓ test/schema.test.ts (1 test)
+ ✓ test/health.test.ts (1 test)
+ ✓ test/cascade-delete.test.ts (1 test)
+ ✓ test/api-me.test.ts (3 tests)
+ ✓ test/magic-link.test.ts (4 tests)
+ ✓ test/session.test.ts (6 tests)
+ ✓ test/seed.test.ts (1 test)
+ ✓ test/magic-link-callback.test.ts (9 tests)
+
+ Test Files  8 passed (8)
+      Tests  26 passed (26)
+
+> clydeford-habits@0.1.0 validate:library
+> tsx scripts/validate-library.ts
+
+Seed files scanned: 12
+Total habits: 364
+By category:
+  Exercise & Movement: 32
+  Nutrition & Hydration: 32
+  Sleep & Rest: 30
+  Mental Health & Mindfulness: 30
+  Home & Housework: 30
+  Money & Admin: 30
+  Relationships & Social: 30
+  Work & Focus: 30
+  Learning & Growth: 30
+  Digital Hygiene: 30
+  Outdoors & Nature: 30
+  Health & Self-care: 30
+
+Library valid.
+```
+
+Wrote `docs/RUN-1-NOTES.md`: a full record of what exists (project
+skeleton, DB schema, habit library, auth stack), a table of the 4 live
+endpoints and what each does, frontend state, this sweep's verification
+output, and a concrete punch list for Run 2 — onboarding AI interview
+(needs a mock Claude client behind an interface, mirroring this run's
+`EmailSender` pattern, since no secrets are available locally), the
+rule-based suggestion engine (no AI, fully buildable/testable locally),
+habit adoption/check-off/streaks, a real dashboard UI (the category accent
+colours exist as Tailwind tokens but nothing consumes them yet), GDPR
+export/delete endpoints, and the still-open CLAUDE.md §15 decisions.
+
+Committed as `6952629` and pushed to `origin/main` successfully.
+
+**All 13 PLAN.md steps are now complete.** Proceeding to end-of-run
+archival per the autonomous-run discipline.
