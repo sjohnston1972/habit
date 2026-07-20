@@ -283,3 +283,54 @@ Next step: Step 9 (Magic-link issue endpoint — `POST
 /api/auth/request-link`: single-use 15-minute token stored hashed, sent via
 the `EmailSender` interface with a console-logging dev implementation, rate
 limited per-IP and per-email).
+
+### 2026-07-20 — Step 9: Magic-link issue endpoint — DONE
+
+Added `migrations/0002_magic_links_ip.sql`: adds an `ip` column (+ index) to
+`magic_links` so the rate limiter can key on IP as well as email — the
+original `magic_links` schema from step 3 only had `email`. Picked up
+automatically by the test harness's `readD1Migrations` (it scans the whole
+`migrations/` directory), no vitest config changes needed.
+
+Extracted `sha256Hex` out of `session.ts` into `src/worker/hash.ts` so both
+the session layer and the new magic-link layer share one hashing
+implementation.
+
+Added `src/worker/magic-link.ts`: `requestMagicLink(db, email, ip,
+emailSender)` generates a raw token, hashes it, and inserts a `magic_links`
+row with a 15-minute `expires_at` — only the hash is ever written. Rate
+limiting counts rows where `email = ? OR ip = ?` created within the last
+minute; a count of 3 or more (i.e. the 4th request) is rejected before any
+token is generated. The `EmailSender` interface has a `ConsoleEmailSender`
+dev implementation that logs instead of sending, per the run's "do not
+attempt live sends" constraint.
+
+Wired `POST /api/auth/request-link` into `src/worker/index.ts`: Zod-validates
+the email, reads the requester IP from `CF-Connecting-IP`, returns 400 for a
+malformed email, 429 with `{ error: "rate_limited" }` when throttled, 200
+otherwise. Moved `zod` from `devDependencies` to `dependencies` in
+`package.json` since it's now used at Worker runtime (request validation),
+not just for type inference — re-ran `npm install` to sync
+`package-lock.json`.
+
+Added `test/magic-link.test.ts` (4 tests): a unit-level test that calls
+`requestMagicLink` directly with a capturing `EmailSender`, extracts the raw
+token from the "sent" link, and asserts the DB row's `token_hash` equals
+`sha256Hex(rawToken)` and is *not* equal to the raw token itself; plus three
+HTTP-level tests via `SELF.fetch` — 400 on a malformed email, 200 on a
+well-formed request, and 429 on a 4th rapid request from the same IP/email
+pair.
+
+Verified:
+- `npm test` → 6 test files, 14 passed (4 new + all 10 prior tests still green).
+- `npm run build` → still exits 0.
+- `npm exec -- wrangler d1 execute habit-db --local --file migrations/0002_magic_links_ip.sql`
+  → exit 0, "2 commands executed successfully" against the persistent local
+  dev D1 (in addition to the fresh-DB path the automated tests exercise).
+
+Committed as `77964a0` and pushed to `origin/main` successfully.
+
+Next step: Step 10 (Magic-link redeem endpoint — `GET
+/api/auth/callback?token=…`: validate, enforce single-use + expiry,
+create-or-fetch user, set HttpOnly+Secure+SameSite=Lax session cookie, mark
+`used_at`; tests for happy path, reused/expired/forged token).
