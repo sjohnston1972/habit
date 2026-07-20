@@ -246,3 +246,38 @@ Verified:
 - `npm test` → 12 test files, 111 passed (6 new + all 105 prior still green).
 
 Next step: Step 5, with the migration renumbered to `0004` as noted above.
+
+### 2026-07-20 — Step 5: Streaks migration and the streak rule — DONE
+
+Added `migrations/0004_streak_repair_counter.sql` (renumbered from the plan's
+`0003`, which step 4a took): `consecutive_since_repair INTEGER NOT NULL
+DEFAULT 0` on `streaks`.
+
+Added `src/shared/streaks.ts`: `applyCheckin(streak, localDate)` returning
+`{ streak, outcome }`, pure and non-mutating. Every row of the design spec's
+rule table is implemented: same day → `noop`; yesterday → increment; 2 days
+ago with repair → increment as `repaired`, repair consumed; 2 days ago without
+→ reset to 1; 3+ days → reset to 1; never completed → 1. `best` rises with
+`current` and survives a reset. A reset hands the repair back and zeroes the
+counter; the counter only advances while the repair is spent, and regenerates
+it at exactly 7.
+
+**One case the plan did not specify, decided and flagged:** a check-in dated
+*before* `last_completed_date` returns `noop`. Step 12's offline queue can
+flush Tuesday's check-off on Wednesday, after Wednesday's has been recorded —
+without this guard a late arrival would compute a negative gap and reset a
+healthy streak. Covered by an explicit test.
+
+Added `test/streaks.test.ts` (16 tests): one per rule-table row, best-streak
+behaviour including survival through a reset, regeneration at exactly 7 (with
+the day-6 case asserting it has *not* regenerated yet), counter starting at
+zero on the repair day, out-of-order replay, non-mutation, and the schema
+column assertion the plan asked to add to `test/schema.test.ts` (placed here
+alongside the rest of the streak coverage instead).
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 13 test files, 127 passed (16 new + all 111 prior still green).
+
+Next step: Step 6 (adoption endpoint — `src/worker/tracking.ts`,
+`POST /api/habits/:id/adopt`).
