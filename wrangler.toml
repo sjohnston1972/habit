@@ -1,0 +1,17 @@
+name = "clydeford-habits"
+main = "src/worker/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "habit-db"
+database_id = "local-placeholder"
+
+[env.production]
+name = "clydeford-habits"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "habit-db"
+database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
