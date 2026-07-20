@@ -37,3 +37,23 @@ Committed as `ab96bc3` and pushed to `origin/main` successfully.
 Next step: Step 2 (Test harness green — wire vitest with
 `@cloudflare/vitest-pool-workers`, add a passing test against the `/health`
 route).
+
+### 2026-07-20 — Step 2: Test harness green — DONE
+
+Added `vitest.config.ts` using `defineWorkersConfig` pointed at `wrangler.toml`
+(runs tests inside Miniflare via `@cloudflare/vitest-pool-workers`, already
+installed in step 1). Added `test/health.test.ts` using the `SELF` fetcher
+from `cloudflare:test` to hit the Worker's `/health` route and assert
+`{ ok: true }`. Extended `tsconfig.worker.json` types to include
+`@cloudflare/vitest-pool-workers` (provides `cloudflare:test` module types)
+and added `test` to its `include`.
+
+Verified:
+- `npm test` → 1 test file, 1 test, all passed.
+- `npm run build` → still exits 0 after the tsconfig change.
+
+Committed as `356a031` and pushed to `origin/main` successfully.
+
+Next step: Step 3 (D1 schema migration — `migrations/0001_init.sql` covering
+all 12 tables from CLAUDE.md §12, cascading FKs, unique index on
+`checkins (user_habit_id, local_date)`).
