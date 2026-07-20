@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { PRODUCT } from "@shared/branding";
 import type { CheckinOutcome } from "@shared/streaks";
+import { localDateFor } from "@shared/time-of-day";
 import { celebrateCheckoff, OUTCOME_MESSAGE } from "../feedback";
+import { dequeue, enqueue, flush, pending } from "../offline-queue";
 import { HabitCard, type HabitCardHabit } from "../components/HabitCard";
 import { Mascot, type MascotMood } from "../components/Mascot";
 import { SuggestionCard, type SuggestionHabit } from "../components/SuggestionCard";
@@ -22,6 +24,37 @@ export function Today() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
+
+  // The device's own zone. The server stores the user's zone too, but a
+  // check-off should be dated where the user actually was when they tapped.
+  const localDate = localDateFor(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+  /** Try to send everything queued, and fold the server's verdict back in. */
+  const syncQueue = useCallback(async () => {
+    const { flushed } = await flush(fetch);
+
+    for (const item of flushed) {
+      if (item.outcome) {
+        celebrateCheckoff(item.outcome as CheckinOutcome);
+        setMessage(OUTCOME_MESSAGE[item.outcome as CheckinOutcome] ?? null);
+      }
+      // The server is the authority on what the streak actually became — a
+      // repair or a reset lands somewhere the optimistic guess didn't.
+      if (item.streak) {
+        setHabits((current) =>
+          current.map((habit) =>
+            habit.user_habit_id === item.user_habit_id
+              ? { ...habit, streak: item.streak! }
+              : habit,
+          ),
+        );
+      }
+    }
+
+    const stillWaiting = await pending();
+    setPendingIds(stillWaiting.map((item) => item.user_habit_id));
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -48,7 +81,18 @@ export function Today() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    // Anything left over from a previous visit goes out as soon as we open.
+    void syncQueue();
+  }, [load, syncQueue]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      void syncQueue();
+    };
+
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [syncQueue]);
 
   const toggleHabit = useCallback(
     async (userHabitId: string) => {
@@ -75,34 +119,27 @@ export function Today() {
         ),
       );
 
-      try {
-        const res = await fetch(`/api/user-habits/${userHabitId}/checkin`, {
-          method: nowCompleted ? "POST" : "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: nowCompleted ? JSON.stringify({}) : undefined,
-        });
+      if (!nowCompleted) {
+        // Undo: drop it from the queue if it never left, then tell the server.
+        await dequeue({ user_habit_id: userHabitId, local_date: localDate });
+        setPendingIds((current) => current.filter((id) => id !== userHabitId));
 
-        if (!nowCompleted || !res.ok) return;
-
-        const body = (await res.json()) as { outcome: CheckinOutcome; streak?: TodayHabit["streak"] };
-
-        celebrateCheckoff(body.outcome);
-        setMessage(OUTCOME_MESSAGE[body.outcome] ?? null);
-
-        // The server is the authority on what the streak actually became — a
-        // repair or a reset lands somewhere the optimistic guess didn't.
-        if (body.streak) {
-          setHabits((current) =>
-            current.map((habit) =>
-              habit.user_habit_id === userHabitId ? { ...habit, streak: body.streak! } : habit,
-            ),
-          );
+        try {
+          await fetch(`/api/user-habits/${userHabitId}/checkin`, { method: "DELETE" });
+        } catch {
+          // The undo will be reconciled by the next load.
         }
-      } catch {
-        // Step 13 replaces this with the offline queue.
+        return;
       }
+
+      // Queue first, then try to send. If the tab dies between the tap and the
+      // request, the check-off is already on disk rather than lost.
+      await enqueue({ user_habit_id: userHabitId, local_date: localDate });
+      setPendingIds((current) => [...new Set([...current, userHabitId])]);
+
+      await syncQueue();
     },
-    [habits],
+    [habits, syncQueue],
   );
 
   const adopt = useCallback(
@@ -171,7 +208,12 @@ export function Today() {
         <>
           <section className="flex flex-col gap-3" aria-label="Today's habits">
             {habits.map((habit) => (
-              <HabitCard key={habit.user_habit_id} habit={habit} onToggle={toggleHabit} />
+              <HabitCard
+                key={habit.user_habit_id}
+                habit={habit}
+                onToggle={toggleHabit}
+                pending={pendingIds.includes(habit.user_habit_id)}
+              />
             ))}
 
             {state === "ready" && habits.length === 0 && (

@@ -492,3 +492,62 @@ Verified:
 - `npm test` → 20 test files, 204 passed (13 new + all 191 prior still green).
 
 Phase C complete. Next step: Step 12 (the offline queue).
+
+### 2026-07-20 — Steps 12 & 13: Offline check-off queueing — DONE
+
+**Step 12 — the queue.** Added `src/app/offline-queue.ts`: `enqueue`, `flush`,
+`pending`, plus `dequeue` and `clearQueue`, backed by IndexedDB. Items are
+keyed `user_habit_id:local_date` and written with `put`, so re-queueing the
+same habit and day overwrites rather than duplicating — one row per habit per
+day, the same shape the server's unique constraint enforces.
+
+`flush` drops an item on 2xx *and* on 4xx. A 4xx means the item can never
+succeed (habit deleted, not yours); retrying it forever would wedge the queue
+behind it. Network failures and 5xx leave the item queued.
+
+Added `test/app/offline-queue.test.ts` (12 tests): enqueue/flush/clear, item
+retained on network failure and on 5xx, dropped on 404, the same local date
+sent on every replay, persistence across a simulated reload, dedupe by
+habit+day, separate rows for separate days, and a later item still flushing
+when an earlier one fails.
+
+**Step 13 — wiring it in.** The Today screen's check-off now enqueues *before*
+attempting the network, then flushes. If the tab dies between tap and request,
+the check-off is already on disk rather than lost. `flush` runs on mount (for
+anything left from a previous visit) and on the `online` event. Habits with an
+unflushed check-in show the `pending` indicator step 9 built into the card.
+
+`flush` was extended to return each item's server response, so a repair
+celebration still fires when a check-off made hours ago finally syncs — the
+queue would otherwise have swallowed the outcome. Undo dequeues the item if it
+never left, so undoing an offline check-off leaves nothing behind to sync.
+
+The client sends the local date from the *device's* timezone
+(`Intl.DateTimeFormat().resolvedOptions().timeZone`), because a check-off
+should be dated where the user actually was when they tapped.
+
+**Four pre-existing tests failed on first run**, all with the same cause:
+jsdom ships no IndexedDB, so the queue write threw before any request went
+out. Fixed in `test/app/setup.ts` by loading `fake-indexeddb/auto` for every
+app test and deleting the database after each one, rather than patching the
+four tests individually.
+
+Added `test/app/offline-checkin.test.tsx` (7 tests): completed shown
+immediately with no connection, the item queued, the waiting-to-sync marker
+appearing and clearing, flush on the `online` event, flush on mount of a
+leftover item carrying its original date, and undo removing a queued item.
+
+Added `test/offline-replay.test.ts` (5 worker-side tests) for the plan's
+required integration case: the same queued check-in replayed three times
+yields exactly one `checkins` row and one increment, with `noop` on the
+repeats. Also covers a check-off counting for the day it was made rather than
+the day it synced, a late out-of-order arrival leaving a healthy streak
+untouched (step 5's guard, proven through the HTTP layer), cross-tenant
+refusal, and a malformed date rejected with 400 rather than stored.
+
+Verified:
+- `npm run build` → exits 0.
+- `npm test` → 23 test files, 228 passed (24 new + all 204 prior still green).
+
+Phase D complete. Steps 1–13 are done: the entire key-independent daily loop
+is committed and pushed. Next step: Step 14, the API key preflight.
