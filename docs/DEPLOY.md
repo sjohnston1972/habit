@@ -27,9 +27,36 @@ env; the split exists so a future staging env can point at its own D1.
 - **Static assets:** the built `dist/` (`[assets]` in `wrangler.toml`). Files
   are served directly; non-file paths (`/api/*`, `/health`) fall through to the
   Hono Worker.
-- **Secret:** `ANTHROPIC_API_KEY` is set on the Worker (via `wrangler secret
-  put`). It lives only in Cloudflare and in the gitignored local `.env` — never
-  committed.
+- **Secrets:** `ANTHROPIC_API_KEY` is set on the Worker. `RESEND_API_KEY` is
+  **not yet set** (see "Email / Resend" below). Optional `EMAIL_FROM` overrides
+  the sender address (default `Clydeford Habits <noreply@clydeford.net>`).
+  Secrets live only in Cloudflare and the gitignored `.env` — never committed.
+
+## Email / Resend
+
+Magic-link email goes through Resend (`src/worker/resend-email.ts`). The Worker
+picks the sender at runtime: `RESEND_API_KEY` set → Resend; unset → console
+logging (`wrangler tail` to see the link). No redeploy is needed after setting
+the key — it takes effect on the next request.
+
+Two one-time steps make real email work:
+
+1. **Verify the sending domain in Resend.** In the Resend dashboard, add
+   `clydeford.net` (or a subdomain like `send.clydeford.net`) and add the
+   DKIM/SPF DNS records it gives you to the **clydeford.net** zone (already on
+   this Cloudflare account). Until the domain shows "verified", Resend rejects
+   sends with a 422 and the endpoint returns `email_send_failed` (502).
+2. **Set the API key** (run in your own terminal so the key isn't echoed):
+   ```sh
+   wrangler secret put RESEND_API_KEY --env production
+   # paste the re_… key at the hidden prompt
+   ```
+
+To send from a different address, also set `EMAIL_FROM` — it must be on the
+verified domain:
+```sh
+wrangler secret put EMAIL_FROM --env production   # e.g. "Clydeford Habits <hello@clydeford.net>"
+```
 
 ## Runbook
 
