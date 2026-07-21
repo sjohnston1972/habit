@@ -27,36 +27,36 @@ env; the split exists so a future staging env can point at its own D1.
 - **Static assets:** the built `dist/` (`[assets]` in `wrangler.toml`). Files
   are served directly; non-file paths (`/api/*`, `/health`) fall through to the
   Hono Worker.
-- **Secrets:** `ANTHROPIC_API_KEY` is set on the Worker. `RESEND_API_KEY` is
-  **not yet set** (see "Email / Resend" below). Optional `EMAIL_FROM` overrides
-  the sender address (default `Clydeford Habits <noreply@clydeford.net>`).
-  Secrets live only in Cloudflare and the gitignored `.env` — never committed.
+- **Secrets:** `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, and `EMAIL_FROM` are all
+  set on the Worker. Secrets live only in Cloudflare and the gitignored `.env`
+  — never committed.
 
 ## Email / Resend
 
 Magic-link email goes through Resend (`src/worker/resend-email.ts`). The Worker
 picks the sender at runtime: `RESEND_API_KEY` set → Resend; unset → console
-logging (`wrangler tail` to see the link). No redeploy is needed after setting
-the key — it takes effect on the next request.
+logging (`wrangler tail` to see the link). `EMAIL_FROM` overrides the sender
+address (code default `Clydeford Habits <noreply@clydeford.net>`). No redeploy
+is needed after changing a secret — it takes effect on the next request.
 
-Two one-time steps make real email work:
+**Current state (working stopgap):** email sends from
+`Clydeford Habits <noreply@foundry-ns.com>` (`EMAIL_FROM`), because that is the
+only domain verified in the Resend account. Sign-in works end to end.
 
-1. **Verify the sending domain in Resend.** In the Resend dashboard, add
-   `clydeford.net` (or a subdomain like `send.clydeford.net`) and add the
-   DKIM/SPF DNS records it gives you to the **clydeford.net** zone (already on
-   this Cloudflare account). Until the domain shows "verified", Resend rejects
-   sends with a 422 and the endpoint returns `email_send_failed` (502).
-2. **Set the API key** (run in your own terminal so the key isn't echoed):
-   ```sh
-   wrangler secret put RESEND_API_KEY --env production
-   # paste the re_… key at the hidden prompt
-   ```
+**To move sending to the on-brand `clydeford.net`:** the Resend account is on
+the free plan (1 domain, already used by `foundry-ns.com`). Free the slot first
+— upgrade the Resend plan, or use a dedicated Resend account for Clydeford —
+then the domain can be registered and verified. Once a slot is available, the
+whole thing (register domain → add DKIM/SPF records to the Cloudflare zone →
+verify) can be automated with the Resend + Cloudflare APIs (see
+`scratchpad/resend-domain-setup.mjs` from the 2026-07-21 session for the shape).
+After verification, remove the stopgap: `wrangler secret delete EMAIL_FROM
+--env production` reverts to the `noreply@clydeford.net` default.
 
-To send from a different address, also set `EMAIL_FROM` — it must be on the
-verified domain:
-```sh
-wrangler secret put EMAIL_FROM --env production   # e.g. "Clydeford Habits <hello@clydeford.net>"
-```
+> **`fetch` binding gotcha:** `ResendEmailSender` binds its `fetch` to
+> `globalThis` in the constructor. Workers' native `fetch` throws "Illegal
+> invocation" if called as an instance method — a plain-function test stub does
+> not reproduce this, so there's a `this`-guarding regression test for it.
 
 ## Runbook
 

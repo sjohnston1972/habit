@@ -73,6 +73,31 @@ describe("ResendEmailSender", () => {
     expect(payload.html).toContain("&quot;&gt;&lt;script&gt;");
   });
 
+  it("calls fetch without rebinding `this` to the sender (Workers Illegal invocation)", async () => {
+    // Workers' native fetch throws "Illegal invocation" when called as a
+    // method (this = the instance). A plain-function stub that guards `this`
+    // reproduces that constraint without a network call.
+    const seen: string[] = [];
+    function guardedFetch(this: unknown, url: string | URL | Request): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+      seen.push(String(url));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    }
+
+    const sender = new ResendEmailSender(
+      "re_test_key",
+      FROM,
+      guardedFetch as unknown as typeof fetch,
+    );
+
+    await expect(
+      sender.send("user@example.com", "https://habit.clydeford.net/api/auth/callback?token=abc"),
+    ).resolves.toBeUndefined();
+    expect(seen).toHaveLength(1);
+  });
+
   it("throws when Resend rejects the send, so the caller can surface a failure", async () => {
     const { fn } = stubFetch({ status: 422, body: { message: "domain not verified" } });
     const sender = new ResendEmailSender("re_test_key", FROM, fn);

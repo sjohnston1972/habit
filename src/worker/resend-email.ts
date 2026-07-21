@@ -51,11 +51,18 @@ function textBody(link: string): string {
 }
 
 export class ResendEmailSender implements EmailSender {
+  private readonly fetchFn: typeof fetch;
+
   constructor(
     private readonly apiKey: string,
     private readonly from: string,
-    private readonly fetchFn: typeof fetch = fetch,
-  ) {}
+    fetchFn: typeof fetch = fetch,
+  ) {
+    // Bind to the global scope. Workers' native fetch throws "Illegal
+    // invocation" if called as a method (`this.fetchFn(...)` would set
+    // `this` to this instance); binding fixes it regardless of call site.
+    this.fetchFn = fetchFn.bind(globalThis);
+  }
 
   async send(email: string, magicLink: string): Promise<void> {
     const response = await this.fetchFn(RESEND_ENDPOINT, {
