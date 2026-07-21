@@ -1,22 +1,20 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PRODUCT } from "@shared/branding";
 import { Mascot } from "../components/Mascot";
 
-type Status = "form" | "sending" | "sent" | "redeeming" | "signed-in" | "error";
+type Status = "form" | "sending" | "sent" | "error";
+
+// A failed magic link redirects here with ?auth=failed (set by the Worker's
+// callback). Redeeming itself is entirely server-side now — this screen only
+// collects an email and reports what happened.
+function hadFailedLink(): boolean {
+  return new URLSearchParams(window.location.search).get("auth") === "failed";
+}
 
 export function SignIn() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("form");
-
-  useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) return;
-
-    setStatus("redeeming");
-    fetch(`/api/auth/callback?token=${encodeURIComponent(token)}`)
-      .then((res) => setStatus(res.ok ? "signed-in" : "error"))
-      .catch(() => setStatus("error"));
-  }, []);
+  const linkFailed = hadFailedLink();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -36,16 +34,23 @@ export function SignIn() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#FFFDF7] px-6 font-body">
-      <Mascot mood={status === "signed-in" ? "celebrating" : status === "error" ? "sad" : "idle"} />
+      <Mascot mood={status === "error" || linkFailed ? "sad" : "idle"} />
       <h1 className="font-display text-3xl text-[#2F6F5E]">{PRODUCT}</h1>
 
-      {status === "redeeming" && <p>Signing you in…</p>}
+      {linkFailed && status !== "sent" && (
+        <p className="max-w-sm text-center text-sm text-amber-900">
+          That sign-in link didn't work — it may have expired or already been used. Request a fresh
+          one below.
+        </p>
+      )}
 
-      {status === "signed-in" && <p>You're signed in! Welcome to {PRODUCT}.</p>}
+      {status === "error" && (
+        <p className="max-w-sm text-center text-sm text-amber-900">
+          Something went wrong sending your link. Try again in a moment.
+        </p>
+      )}
 
-      {status === "error" && <p>That link didn't work. Try requesting a new one below.</p>}
-
-      {(status === "form" || status === "sending" || status === "error") && (
+      {status !== "sent" && (
         <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-3">
           <label className="font-body text-sm" htmlFor="email">
             Email address
@@ -69,7 +74,9 @@ export function SignIn() {
         </form>
       )}
 
-      {status === "sent" && <p>Check your email for a link to sign in.</p>}
+      {status === "sent" && (
+        <p className="max-w-sm text-center">Check your email for a link to sign in.</p>
+      )}
     </main>
   );
 }

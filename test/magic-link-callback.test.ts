@@ -87,12 +87,18 @@ describe("redeemMagicLink", () => {
 });
 
 describe("GET /api/auth/callback", () => {
-  it("sets an HttpOnly, Secure, SameSite=Lax session cookie on success", async () => {
+  it("redeems, sets the session cookie, and redirects into the app on success", async () => {
     const email = `${crypto.randomUUID()}@example.com`;
     const token = await issueToken(email, "198.51.100.5");
 
-    const res = await SELF.fetch(`https://example.com/api/auth/callback?token=${token}`);
-    expect(res.status).toBe(200);
+    // A browser follows the redirect; manual mode lets us inspect it.
+    const res = await SELF.fetch(`https://example.com/api/auth/callback?token=${token}`, {
+      redirect: "manual",
+    });
+
+    // 302 to the app root — this is what carries the just-signed-in user to Today.
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/");
 
     const setCookie = res.headers.get("Set-Cookie");
     expect(setCookie).toBeTruthy();
@@ -102,22 +108,31 @@ describe("GET /api/auth/callback", () => {
     expect(setCookie).toMatch(/SameSite=Lax/i);
   });
 
-  it("returns 400 for a reused token", async () => {
+  it("redirects to the app with an error flag for a reused token, setting no session", async () => {
     const email = `${crypto.randomUUID()}@example.com`;
     const token = await issueToken(email, "198.51.100.6");
 
-    const first = await SELF.fetch(`https://example.com/api/auth/callback?token=${token}`);
-    expect(first.status).toBe(200);
+    const first = await SELF.fetch(`https://example.com/api/auth/callback?token=${token}`, {
+      redirect: "manual",
+    });
+    expect(first.status).toBe(302);
 
-    const second = await SELF.fetch(`https://example.com/api/auth/callback?token=${token}`);
-    expect(second.status).toBe(400);
-    expect(await second.json()).toEqual({ error: "used" });
+    const second = await SELF.fetch(`https://example.com/api/auth/callback?token=${token}`, {
+      redirect: "manual",
+    });
+    expect(second.status).toBe(302);
+    expect(second.headers.get("Location")).toBe("/?auth=failed");
+    // A failed redeem must not hand out a session.
+    expect(second.headers.get("Set-Cookie")).toBeNull();
   });
 
-  it("returns 400 for a forged token", async () => {
-    const res = await SELF.fetch("https://example.com/api/auth/callback?token=totally-made-up");
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "invalid" });
+  it("redirects to the app with an error flag for a forged token", async () => {
+    const res = await SELF.fetch("https://example.com/api/auth/callback?token=totally-made-up", {
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/?auth=failed");
+    expect(res.headers.get("Set-Cookie")).toBeNull();
   });
 
   it("returns 400 when no token is provided", async () => {

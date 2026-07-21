@@ -57,6 +57,11 @@ app.post("/api/auth/request-link", async (c) => {
   return c.json({ ok: true });
 });
 
+// A browser navigates here by clicking the emailed link, so the response is a
+// redirect into the app — not JSON. On success the session cookie is set and
+// the user lands on the app root (→ Today); on failure they land on the app
+// with an error flag so the sign-in screen can explain it. A missing token is
+// a malformed request, not a user flow, so it stays a 400.
 app.get("/api/auth/callback", async (c) => {
   const token = c.req.query("token");
 
@@ -66,7 +71,7 @@ app.get("/api/auth/callback", async (c) => {
 
   const redeemed = await redeemMagicLink(c.env.DB, token);
   if (!redeemed.ok) {
-    return c.json({ error: redeemed.reason }, 400);
+    return c.redirect("/?auth=failed", 302);
   }
 
   const { token: sessionToken } = await createSession(c.env.DB, redeemed.userId);
@@ -79,7 +84,7 @@ app.get("/api/auth/callback", async (c) => {
     maxAge: SESSION_DURATION_MS / 1000,
   });
 
-  return c.json({ ok: true });
+  return c.redirect("/", 302);
 });
 
 // Always scoped by the session-resolved user_id (set by requireAuth), never
