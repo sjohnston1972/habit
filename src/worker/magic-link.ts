@@ -10,8 +10,8 @@ export interface EmailSender {
   send(email: string, magicLink: string): Promise<void>;
 }
 
-// Dev implementation — logs instead of sending. Do not wire a real provider
-// (Resend) into this run; see CLAUDE.md §3 and PLAN.md decisions.
+// Dev / fallback implementation — logs the link instead of sending. Used when
+// no RESEND_API_KEY is configured; production uses ResendEmailSender.
 export class ConsoleEmailSender implements EmailSender {
   async send(email: string, magicLink: string): Promise<void> {
     console.log(`[magic-link] ${email}: ${magicLink}`);

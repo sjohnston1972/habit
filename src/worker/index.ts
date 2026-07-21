@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "./auth-middleware";
-import { ConsoleEmailSender, redeemMagicLink, requestMagicLink } from "./magic-link";
+import { ConsoleEmailSender, redeemMagicLink, requestMagicLink, type EmailSender } from "./magic-link";
+import { ResendEmailSender } from "./resend-email";
 import { createSession, SESSION_COOKIE_NAME, SESSION_DURATION_MS } from "./session";
 import { createClaudeClient } from "./claude";
 import { onboardingTurn } from "./onboarding";
@@ -18,6 +19,17 @@ app.get("/health", (c) => c.json({ ok: true }));
 
 const requestLinkSchema = z.object({ email: z.string().email() });
 
+const DEFAULT_EMAIL_FROM = "Clydeford Habits <noreply@clydeford.net>";
+
+// Resend in production; console logging in dev or if the key is unset — so a
+// misconfigured secret degrades to "check the logs" rather than a hard outage.
+function emailSenderFor(env: Bindings): EmailSender {
+  if (env.RESEND_API_KEY) {
+    return new ResendEmailSender(env.RESEND_API_KEY, env.EMAIL_FROM || DEFAULT_EMAIL_FROM);
+  }
+  return new ConsoleEmailSender();
+}
+
 app.post("/api/auth/request-link", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = requestLinkSchema.safeParse(body);
@@ -27,7 +39,16 @@ app.post("/api/auth/request-link", async (c) => {
   }
 
   const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
-  const result = await requestMagicLink(c.env.DB, parsed.data.email, ip, new ConsoleEmailSender());
+
+  let result;
+  try {
+    result = await requestMagicLink(c.env.DB, parsed.data.email, ip, emailSenderFor(c.env));
+  } catch (error) {
+    // The link row is written before the send, so a delivery failure leaves a
+    // harmless unused token; surface a clear error rather than a false success.
+    console.error("[request-link] send failed:", error);
+    return c.json({ error: "email_send_failed" }, 502);
+  }
 
   if (!result.ok) {
     return c.json({ error: result.reason }, 429);
