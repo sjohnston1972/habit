@@ -3,15 +3,33 @@ main = "src/worker/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# The built React PWA. Static files (index.html, /assets/*, /icons/*, the
+# service worker and manifest) are served directly; any path that isn't a file
+# — /api/*, /health — falls through to the Worker below.
+[assets]
+directory = "./dist"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "habit-db"
-database_id = "local-placeholder"
+database_id = "d4273a52-23dc-4b5a-b593-7e8c1278abad"
 
+# --- production ---
+# Same database as the default env for now (single environment of real data);
+# the split exists so a future staging env can point at its own D1.
 [env.production]
 name = "clydeford-habits"
+
+[env.production.assets]
+directory = "./dist"
 
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "habit-db"
-database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+database_id = "d4273a52-23dc-4b5a-b593-7e8c1278abad"
+
+# app.clydeford.net keeps the root free for a marketing/landing page later
+# (CLAUDE.md §15 #1). Requires the clydeford.net zone on this account.
+[[env.production.routes]]
+pattern = "app.clydeford.net"
+custom_domain = true

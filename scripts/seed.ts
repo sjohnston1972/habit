@@ -64,6 +64,10 @@ function buildSeedSql(): string {
 }
 
 function main() {
+  // `--remote` seeds the live D1; without it, the local dev database.
+  const remote = process.argv.includes("--remote");
+  const target = remote ? "--remote" : "--local";
+
   const tmpDir = mkdtempSync(path.join(tmpdir(), "habit-seed-"));
   const sqlPath = path.join(tmpDir, "seed.sql");
 
@@ -74,11 +78,15 @@ function main() {
 
     execFileSync(
       process.execPath,
-      [wranglerBin, "d1", "execute", "habit-db", "--local", "--file", sqlPath],
+      [wranglerBin, "d1", "execute", "habit-db", target, "--file", sqlPath, "--yes"],
       { cwd: PROJECT_ROOT, stdio: "inherit" },
     );
 
-    console.log(`\nSeeded ${ALL_HABITS.length} habits (library_version ${LIBRARY_VERSION}) into the local D1 database.`);
+    console.log(
+      `\nSeeded ${ALL_HABITS.length} habits (library_version ${LIBRARY_VERSION}) into the ${
+        remote ? "remote" : "local"
+      } D1 database.`,
+    );
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }

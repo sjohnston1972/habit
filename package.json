@@ -9,6 +9,9 @@
     "test": "vitest run",
     "validate:library": "tsx scripts/validate-library.ts",
     "seed": "tsx scripts/seed.ts",
+    "seed:remote": "tsx scripts/seed.ts --remote",
+    "deploy": "npm run build && wrangler deploy --env production",
+    "db:migrate:remote": "wrangler d1 migrations apply habit-db --remote",
     "test:manifest": "tsx scripts/check-manifest.ts"
   },
   "devDependencies": {
