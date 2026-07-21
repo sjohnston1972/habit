@@ -28,8 +28,9 @@ binding = "DB"
 database_name = "habit-db"
 database_id = "d4273a52-23dc-4b5a-b593-7e8c1278abad"
 
-# app.clydeford.net keeps the root free for a marketing/landing page later
-# (CLAUDE.md §15 #1). Requires the clydeford.net zone on this account.
+# habit.clydeford.net keeps the root free for a marketing/landing page later
+# (CLAUDE.md §15 #1) and matches the magic-link base URL hardcoded in
+# src/worker/magic-link.ts. Requires the clydeford.net zone on this account.
 [[env.production.routes]]
-pattern = "app.clydeford.net"
+pattern = "habit.clydeford.net"
 custom_domain = true

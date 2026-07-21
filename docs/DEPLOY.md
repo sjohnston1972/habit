@@ -8,8 +8,14 @@ First deployed 2026-07-21 (interactive session). Cloudflare account
 
 | URL | What |
 |---|---|
-| `https://app.clydeford.net` | Production. Custom domain, the canonical entrance. |
+| `https://habit.clydeford.net` | Production. Custom domain, the canonical entrance. Matches the magic-link base URL in `src/worker/magic-link.ts`. |
 | `https://clydeford-habits.stevie-johnston.workers.dev` | Same Worker script, workers.dev URL. Useful for debugging; serves the **same production data**. Disable with `workers_dev = false` if a single canonical URL is wanted. |
+
+> An earlier deploy briefly attached `app.clydeford.net` before switching to
+> `habit.clydeford.net`. If a stray `app.clydeford.net` custom domain or DNS
+> record lingers, remove it in the dashboard: **Workers & Pages →
+> clydeford-habits → Settings → Domains & Routes** (remove the custom domain),
+> then delete any leftover `app` record under **clydeford.net → DNS**.
 
 Both are the **same** Worker (`clydeford-habits`) bound to the **same** D1
 database — `[env.production]` deliberately reuses the name and DB of the default
