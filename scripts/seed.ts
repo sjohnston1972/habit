@@ -18,12 +18,26 @@ function sqlValue(value: string | number | null | undefined): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+// Upsert by the habit's stable id (see src/worker/seed.ts for the rationale):
+// re-seeding updates rows in place and never removes a habit a user may have
+// adopted, so it cannot orphan user data.
+const UPSERT_TAIL =
+  " ON CONFLICT (id) DO UPDATE SET" +
+  " library_version = excluded.library_version, title = excluded.title," +
+  " category = excluded.category, tags = excluded.tags," +
+  " identity_statement = excluded.identity_statement, tiny_version = excluded.tiny_version," +
+  " standard_version = excluded.standard_version, ambitious_version = excluded.ambitious_version," +
+  " cue_suggestion = excluded.cue_suggestion, time_of_day = excluded.time_of_day," +
+  " duration_minutes = excluded.duration_minutes, difficulty = excluded.difficulty," +
+  " frequency_default = excluded.frequency_default, stack_anchors = excluded.stack_anchors," +
+  " prerequisites = excluded.prerequisites";
+
 function buildSeedSql(): string {
-  const statements = ["DELETE FROM habits;"];
+  const statements: string[] = [];
 
   for (const habit of ALL_HABITS) {
     const values = [
-      sqlValue(crypto.randomUUID()),
+      sqlValue(habit.id),
       sqlValue(LIBRARY_VERSION),
       sqlValue(habit.title),
       sqlValue(habit.category),
@@ -42,7 +56,7 @@ function buildSeedSql(): string {
     ].join(", ");
 
     statements.push(
-      `INSERT INTO habits (id, library_version, title, category, tags, identity_statement, tiny_version, standard_version, ambitious_version, cue_suggestion, time_of_day, duration_minutes, difficulty, frequency_default, stack_anchors, prerequisites) VALUES (${values});`,
+      `INSERT INTO habits (id, library_version, title, category, tags, identity_statement, tiny_version, standard_version, ambitious_version, cue_suggestion, time_of_day, duration_minutes, difficulty, frequency_default, stack_anchors, prerequisites) VALUES (${values})${UPSERT_TAIL};`,
     );
   }
 

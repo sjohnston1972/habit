@@ -1,34 +1,52 @@
-import type { Habit } from "@shared/habit";
-import { ALL_HABITS, LIBRARY_VERSION } from "@shared/seed-data";
+import { ALL_HABITS, LIBRARY_VERSION, type SeedHabit } from "@shared/seed-data";
 
 export { ALL_HABITS, LIBRARY_VERSION };
 
-const INSERT_SQL = `
+// Upsert by the habit's stable id rather than DELETE-then-INSERT: re-seeding
+// (e.g. to add or reword habits) updates rows in place and never removes a
+// habit a user may have adopted, so `user_habits`/`suggestion_log` references
+// survive. Idempotent — a re-run with the same library is a no-op on row
+// count. Habits dropped from the library are intentionally left in place
+// (archival, not deletion, is the eventual path) to avoid cascading away user
+// data.
+const UPSERT_SQL = `
   INSERT INTO habits (
     id, library_version, title, category, tags, identity_statement,
     tiny_version, standard_version, ambitious_version, cue_suggestion,
     time_of_day, duration_minutes, difficulty, frequency_default,
     stack_anchors, prerequisites
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT (id) DO UPDATE SET
+    library_version = excluded.library_version,
+    title = excluded.title,
+    category = excluded.category,
+    tags = excluded.tags,
+    identity_statement = excluded.identity_statement,
+    tiny_version = excluded.tiny_version,
+    standard_version = excluded.standard_version,
+    ambitious_version = excluded.ambitious_version,
+    cue_suggestion = excluded.cue_suggestion,
+    time_of_day = excluded.time_of_day,
+    duration_minutes = excluded.duration_minutes,
+    difficulty = excluded.difficulty,
+    frequency_default = excluded.frequency_default,
+    stack_anchors = excluded.stack_anchors,
+    prerequisites = excluded.prerequisites
 `;
 
-// Idempotent: every run replaces the whole library rather than appending to
-// it, so re-seeding never produces duplicate rows (CLAUDE.md §4).
 export async function seedHabits(
   db: D1Database,
-  habits: Habit[] = ALL_HABITS,
+  habits: SeedHabit[] = ALL_HABITS,
   libraryVersion: number = LIBRARY_VERSION,
 ): Promise<number> {
-  await db.prepare("DELETE FROM habits").run();
-
   if (habits.length === 0) {
     return 0;
   }
 
-  const insert = db.prepare(INSERT_SQL);
+  const insert = db.prepare(UPSERT_SQL);
   const statements = habits.map((habit) =>
     insert.bind(
-      crypto.randomUUID(),
+      habit.id,
       libraryVersion,
       habit.title,
       habit.category,

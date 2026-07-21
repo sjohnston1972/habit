@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CATEGORIES, HabitSchema } from "../src/shared/habit";
+import { deriveHabitId } from "../src/shared/seed-data";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SEED_DIR = path.join(__dirname, "..", "seed");
@@ -13,6 +14,7 @@ function main() {
   let totalHabits = 0;
   const countByCategory = new Map<string, number>();
   const titleToFiles = new Map<string, string[]>();
+  const idToTitles = new Map<string, string[]>();
 
   for (const file of files) {
     const filePath = path.join(SEED_DIR, file);
@@ -51,6 +53,13 @@ function main() {
       const existing = titleToFiles.get(habit.title) ?? [];
       existing.push(file);
       titleToFiles.set(habit.title, existing);
+
+      // Habit ids are title slugs and must be unique — two titles slugging to
+      // the same id would collide on seed (one silently overwriting the other).
+      const id = deriveHabitId(habit.title);
+      const titlesForId = idToTitles.get(id) ?? [];
+      titlesForId.push(habit.title);
+      idToTitles.set(id, titlesForId);
     });
   }
 
@@ -58,6 +67,14 @@ function main() {
   for (const [title, files] of duplicateTitles) {
     errorCount++;
     console.error(`✗ duplicate title "${title}" found in: ${files.join(", ")}`);
+  }
+
+  const idCollisions = [...idToTitles.entries()].filter(
+    ([, titles]) => new Set(titles).size > 1,
+  );
+  for (const [id, titles] of idCollisions) {
+    errorCount++;
+    console.error(`✗ id collision "${id}" from distinct titles: ${[...new Set(titles)].join(", ")}`);
   }
 
   console.log("");
